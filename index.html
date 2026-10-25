@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>Sistem Belajar Mahardika</title>
+    <link rel="icon" href="data:,">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fredoka:wght@400;500;600&family=Quicksand:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather:wght@400;700&family=Montserrat:wght@400;600;700&family=Open+Sans:wght@400;600&family=Oswald:wght@400;500&family=Playfair+Display:wght@400;700&family=Poppins:wght@400;600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <script>if(sessionStorage.getItem("statusGuru")==="aktif" && sessionStorage.getItem("previewMode")!=="true"){document.documentElement.classList.add("force-edit-mode");}</script>
+    
+    <!-- ENGINE MATHJAX UNTUK LATEX RENDERING -->
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']], processEscapes: true },
+            options: { ignoreHtmlClass: 'tex2jax_ignore', processHtmlClass: 'tex2jax_process' },
+            svg: { fontCache: 'global' }, startup: { typeset: true }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js"></script>
+
+    <style id="dynamic-theme-styles"></style>
+    <!-- MENGHUBUNGKAN KE FILE CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <canvas id="laser-canvas"></canvas>
+    <input type="file" id="image-upload-input" accept="image/*" style="display:none">
+    <button class="preview-btn" id="btn-preview" onclick="togglePreviewMode()">👁️ Preview as Student</button>
+
+    <!-- TOMBOL BACK HISTORY -->
+    <button class="back-btn-floating" onclick="history.back()" title="Kembali ke Room Sebelumnya">⬅️ Back</button>
+    <div class="fast-scroll-btns">
+        <button onclick="window.toggleFullScreen()" title="Full Screen" style="background:#8e44ad;">🔲</button>
+        <button onclick="window.scrollTo({top:0, behavior:'smooth'})" title="Ke Atas">⬆️</button>
+        <button onclick="window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'})" title="Ke Bawah">⬇️</button>
+    </div>
+
+    <div class="bottom-breadcrumb-bar">
+        <div id="bottom-breadcrumb" style="flex:1;">📍 Beranda</div>
+        <div id="save-status-bar">Cloud Sync: Ready</div>
+    </div>
+
+    <div id="tooltip-istilah" onmouseenter="clearTimeout(tipTimer)" onmouseleave="window.leaveIstilah()">
+        <strong id="tooltip-title"></strong>
+        <span id="tooltip-body" style="color:#333;"></span>
+    </div>
+
+    <!-- AI TUTOR UI -->
+    <div id="ai-tutor-box">
+        <div id="ai-tutor-header"><span>🤖 Mahardika AI Assistant</span><button onclick="tutupAITutor()" style="background:none;border:none;color:white;cursor:pointer;font-weight:bold;">✕</button></div>
+        <div id="ai-tutor-body"><div class="ai-bubble">Halo! Blok teks mana saja di materi, lalu klik tombol "🤖 AI" di toolbar atas untuk bertanya.</div></div>
+        <div id="ai-tutor-footer"><input type="text" id="ai-tutor-input" class="input-box" style="margin:0; flex:1; font-size:12px;" placeholder="Tanya sesuatu..."><button class="btn-action" style="width:auto; padding:8px; font-size:11px;" onclick="kirimPesanAI()">Kirim</button></div>
+    </div>
+
+    <div id="strict-warning-overlay">
+        <h1 class="strict-text">⚠️ PELANGGARAN TERDETEKSI ⚠️</h1>
+        <p id="strict-warning-info" style="font-size:22px; max-width:600px; font-weight:bold; color:#f1c40f;"></p>
+        <p style="font-size:18px; max-width:600px;">Anda keluar dari halaman ujian, mengubah ukuran layar (split-screen), atau membuka aplikasi lain. Aktivitas dicatat!</p>
+        <h2 id="strict-countdown" style="font-size:100px; margin:20px 0; font-family:'Bebas Neue';">30</h2>
+        <p style="font-size:18px;">Ujian dilanjutkan setelah waktu tunggu selesai.</p>
+        <input type="password" id="strict-override-pwd" placeholder="Sandi Darurat (Opsional)" style="margin-top:30px; padding:10px; border-radius:6px; border:none; text-align:center; font-family:'Poppins'; width:200px; outline:none; color:#333;" oninput="if(this.value==='dinosaurus1'){window.cancelHukuman();this.value='';}">
+    </div>
+    
+    <div id="ujian-strict-room">
+        <div id="ujian-timer-fixed" style="display:none; position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#c0392b; color:white; padding:8px 20px; border-radius:30px; font-weight:bold; font-size:18px; z-index:100001; box-shadow:0 4px 10px rgba(0,0,0,0.3); border:2px solid white; font-family:'Bebas Neue', sans-serif; letter-spacing:1px;">00:00:00</div>
+        
+        <button class="btn-close-room" onclick="window.tutupUjianStrict()" style="display:none;" id="btn-close-strict">✕ Keluar Ruang</button>
+        <div style="max-width: 800px; margin: 0 auto; text-align: center; margin-bottom: 20px; padding-top: 10px;">
+            <h1 style="font-size: 32px; color: #c0392b; font-family: 'Montserrat'; margin-bottom: 5px;" id="ujian-judul-ui">Ujian Kelas 🎯</h1>
+            <p style="color: #7f8c8d; margin-top: 0; font-weight:bold;" id="ujian-strict-subtitle">Mode Ketat: Dilarang Keluar atau Membuka Aplikasi Lain!</p>
+        </div>
+        <div id="ujian-strict-container"></div>
+    </div>
+    
+    <div id="temporary-quiz-room"><div class="btn-print-room"><button onclick="cetakKuisPDF('temporary-quiz-container', 'Latihan Mandiri')">🖨️ Print PDF</button> <span style="color:#aaa;">|</span> <button onclick="exportWordKuis('temporary-quiz-container', 'Latihan Mandiri')">📄 Export Word</button></div><button class="btn-close-room" onclick="tutupLatihanMandiri()">✕ Keluar Ruang</button><div style="max-width: 800px; margin: 0 auto; text-align: center; margin-bottom: 30px; padding-top: 20px;"><h1 style="font-size: 32px; color: #2c3e50; font-family: 'Montserrat'; margin-bottom: 5px;" id="lat-judul-ui">Ruang Latihan Mandiri 🚀</h1><p style="color: #7f8c8d; margin-top: 0;">Soal diacak. Hasil tidak disimpan permanen.</p></div><div id="temporary-quiz-container"></div></div>
+
+    <!-- SEMUA MODAL -->
+    <!-- Modal Login Guru & Super Admin -->
+    <div id="modal-login-guru" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-login-guru')">
+        <div class="modal-box" style="width:350px; text-align:center;">
+            <div class="modal-header" style="background:#2c3e50; color:white;">
+                <h3 style="margin:0;">🔒 Login Guru</h3>
+                <button class="close-btn" style="color:white; z-index:99999;" onclick="tutupModal('modal-login-guru')">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="input-username-guru" class="input-box" placeholder="Username (misal: mahardika)" style="text-align:center; font-weight:bold; font-size:16px; margin-bottom:12px;">
+                <input type="password" id="input-sandi-guru" class="input-box" placeholder="Masukkan Sandi" style="text-align:center; font-weight:bold; font-size:16px;">
+                <button type="button" class="btn-action" style="background:#2980b9; width:100%; margin-top:10px;" onclick="window.prosesLoginGuru()">Masuk Ke Ruang Kerja</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-simbol" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-simbol')">
+        <div class="modal-box" style="width: 550px; max-height: 85vh;">
+            <div class="modal-header" style="background:#fdfefe;"><h3 style="color:#2980b9; margin:0;">∑ Sisipkan Simbol</h3><button class="close-btn" onclick="tutupModal('modal-simbol')">✕</button></div>
+            <div class="modal-body" style="padding-top:0;">
+                <div class="sym-cat-title">Aritmatika Dasar</div><div class="sym-grid"><button class="sym-btn" onclick="sisipkanSimbol('+')">+</button><button class="sym-btn" onclick="sisipkanSimbol('-')">-</button><button class="sym-btn" onclick="sisipkanSimbol('×')">×</button><button class="sym-btn" onclick="sisipkanSimbol('·')">·</button><button class="sym-btn" onclick="sisipkanSimbol('÷')">÷</button><button class="sym-btn" onclick="sisipkanSimbol('/')">/</button><button class="sym-btn" onclick="sisipkanSimbol('±')">±</button><button class="sym-btn" onclick="sisipkanSimbol('=')">=</button><button class="sym-btn" onclick="sisipkanSimbol('≠')">≠</button><button class="sym-btn" onclick="sisipkanSimbol('≈')">≈</button><button class="sym-btn" onclick="sisipkanSimbol('%')">%</button></div>
+                <div class="sym-cat-title">Perbandingan & Relasi</div><div class="sym-grid"><button class="sym-btn" onclick="sisipkanSimbol('<')">&lt;</button><button class="sym-btn" onclick="sisipkanSimbol('>')">&gt;</button><button class="sym-btn" onclick="sisipkanSimbol('≤')">≤</button><button class="sym-btn" onclick="sisipkanSimbol('≥')">≥</button><button class="sym-btn" onclick="sisipkanSimbol('∝')">∝</button></div>
+                <div class="sym-cat-title">Himpunan & Logika</div><div class="sym-grid"><button class="sym-btn" onclick="sisipkanSimbol('∈')">∈</button><button class="sym-btn" onclick="sisipkanSimbol('∉')">∉</button><button class="sym-btn" onclick="sisipkanSimbol('∅')">∅</button><button class="sym-btn" onclick="sisipkanSimbol('{}')">{}</button><button class="sym-btn" onclick="sisipkanSimbol('∪')">∪</button><button class="sym-btn" onclick="sisipkanSimbol('∩')">∩</button><button class="sym-btn" onclick="sisipkanSimbol('⊂')">⊂</button><button class="sym-btn" onclick="sisipkanSimbol('∀')">∀</button><button class="sym-btn" onclick="sisipkanSimbol('∃')">∃</button></div>
+                <div class="sym-cat-title">Aljabar, Geometri, Kalkulus</div><div class="sym-grid"><button class="sym-btn" onclick="sisipkanSimbol('√')">√</button><button class="sym-btn" onclick="sisipkanSimbol('^')">^</button><button class="sym-btn" onclick="sisipkanSimbol('∞')">∞</button><button class="sym-btn" onclick="sisipkanSimbol('π')">π</button><button class="sym-btn" onclick="sisipkanSimbol('∠')">∠</button><button class="sym-btn" onclick="sisipkanSimbol('∥')">∥</button><button class="sym-btn" onclick="sisipkanSimbol('⊥')">⊥</button><button class="sym-btn" onclick="sisipkanSimbol('Σ')">Σ</button><button class="sym-btn" onclick="sisipkanSimbol('∫')">∫</button><button class="sym-btn" onclick="sisipkanSimbol('Δ')">Δ</button></div>
+                <div class="sym-cat-title">Pecahan & LaTeX Cepat</div><div class="sym-grid"><button class="sym-btn" onclick="sisipkanSimbol('½')">½</button><button class="sym-btn" onclick="sisipkanSimbol('⅓')">⅓</button><button class="sym-btn" onclick="sisipkanSimbol('¼')">¼</button><button class="sym-btn" onclick="sisipkanSimbol('¾')">¾</button><button class="sym-btn" style="grid-column: span 2; font-size:12px;" onclick="sisipkanSimbol('\\frac{a}{b}')">Pecahan (LaTeX)</button><button class="sym-btn" style="grid-column: span 2; font-size:12px;" onclick="sisipkanSimbol('$$ E = mc^2 $$')">Block (LaTeX)</button></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-setup-latihan" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-setup-latihan')"><div class="modal-box" style="width: 450px;"><div class="modal-header" style="background:#eaf2f8;"><h3 style="color:#2980b9; margin:0;">🚀 Buat Latihan</h3><button class="close-btn" onclick="tutupModal('modal-setup-latihan')">✕</button></div><div class="modal-body"><label style="font-weight:bold;font-size:12px;display:block;">Kelas:</label><select id="setup-kelas" class="input-box" onchange="updateDropdownStudent('kelas')"></select><label style="font-weight:bold;font-size:12px;display:block;">Mapel:</label><select id="setup-mapel" class="input-box" onchange="updateDropdownStudent('mapel')" disabled></select><label style="font-weight:bold;font-size:12px;display:block;">Bab:</label><select id="setup-bab" class="input-box" onchange="updateDropdownStudent('bab')" disabled></select><label style="font-weight:bold;font-size:12px;display:block;">Kesulitan:</label><select id="setup-kesulitan" class="input-box" disabled></select><label style="font-weight:bold;font-size:12px;display:block;">Jumlah Soal:</label><input type="number" id="setup-jumlah" class="input-box" value="10" min="1" max="100" placeholder="Ketik jumlah soal"><button class="btn-action" style="background:#2980b9;" onclick="mulaiLatihanMandiri()">Mulai ⚡</button></div></div></div>
+    
+<div id="modal-enter-ujian" class="modal-overlay" style="z-index: 9999999;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="modal-box" style="width: 400px; text-align:center; position:relative; z-index: 10000000;">
+            <div class="modal-header" style="background:#fdf2e9; position:relative; padding: 20px;">
+                <h3 style="color:#d35400; margin:0; padding-right:30px;">🎯 Masuk Ujian Kelas</h3>
+                <button type="button" class="close-btn" style="position:absolute; right:15px; top:15px; z-index:99999999; background:none; border:none; font-size:22px; font-weight:bold; color:#c0392b; cursor:pointer;" onclick="document.getElementById('modal-enter-ujian').style.display='none'">✕</button>
+            </div>
+            <div class="modal-body" style="text-align:left; padding:20px;">
+                <label style="font-weight:bold; font-size:12px; color:#2c3e50; display:block; margin-bottom:5px;">1. Pilih Kelas Anda:</label>
+                <select id="input-kelas-siswa" class="input-box" onchange="window.updateDatalistSiswaUjian()" style="text-align:center; font-weight:bold; color:#2c3e50; margin-bottom:15px;" onclick="window.muatOpsiKelasSiswa()">
+                    <option value="" disabled selected>-- Pilih Kelas Anda --</option>
+                </select>
+                
+                <label style="font-weight:bold; font-size:12px; color:#2c3e50; display:block; margin-bottom:5px;">2. Nama Lengkap (Ketik & Pilih):</label>
+                <input type="text" id="input-nama-siswa" list="datalist-siswa-ujian" class="input-box" placeholder="Mulai ketik nama Anda..." autocomplete="off" style="text-align:center; font-weight:bold; margin-bottom:15px;">
+                <datalist id="datalist-siswa-ujian"></datalist>
+                
+                <label style="font-weight:bold; font-size:12px; color:#2c3e50; display:block; margin-bottom:5px;">3. Kode Ujian:</label>
+                <input type="text" id="input-kode-ujian" class="input-box" placeholder="KODE UJIAN" style="text-align:center; font-weight:bold; font-size:20px; text-transform:uppercase; color:#c0392b; margin-bottom:20px;">
+                
+                <button type="button" class="btn-action" style="background:#e67e22; width:100%; font-size:15px; padding:12px; border-radius:8px; box-shadow:0 4px 10px rgba(230,126,34,0.3);" onclick="verifikasiMasukUjian()">🚀 Mulai Ujian 🔒</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="modal-live-monitor" class="modal-overlay" onclick="if(event.target===this)tutupLiveMonitor()">
+        <div class="modal-box" style="width: 600px; max-height: 90vh;">
+            <div class="modal-header" style="background:#fdedec;">
+                <h3 style="color:#c0392b; margin:0;">📡 Live Monitor Ujian</h3>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <button class="btn-action" style="background:#e74c3c; width:auto; padding:5px 12px; font-size:11px;" onclick="hapusLiveMonitorData()">🗑️ Hapus History</button>
+                    <button class="close-btn" onclick="tutupLiveMonitor()">✕</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <select id="live-monitor-paket" class="input-box" onchange="loadLiveMonitor(this.value)"><option value="">-- Pilih Ujian --</option></select>
+                <div id="live-monitor-list" style="margin-top:15px; display:flex; flex-direction:column; gap:10px; font-family: 'Poppins'; font-size: 13px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-rekap-nilai" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-rekap-nilai')"><div class="modal-box" style="width: 900px;"><div class="modal-header" style="background:#e8f8f5;"><h3 style="color:#16a085; margin:0;">📊 Spreadsheet Nilai</h3><button class="close-btn" onclick="tutupModal('modal-rekap-nilai')">✕</button></div><div class="modal-body" style="padding:0;"><div style="padding:15px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; background:#f4f6f6; gap:10px;"><select id="filter-rekap-ujian" class="input-box" style="width:250px;margin:0;" onchange="renderTabelNilai()"></select><div style="display:flex; gap:10px;"><button class="btn-action" style="background:#e74c3c;width:auto;padding:8px 15px;" onclick="hapusDataRekap()">🗑️ Clear Data</button><button class="btn-action" style="background:#16a085;width:auto;padding:8px 15px;" onclick="exportExcelNilai()">📥 Export CSV</button></div></div><div style="padding:15px; overflow-x:auto;"><table class="excel-table" id="tabel-spreadsheet-nilai"><thead><tr><th>Waktu</th><th>Siswa</th><th>Ujian</th><th>Nilai</th><th>Benar</th><th>Salah</th></tr></thead><tbody id="tbody-rekap-nilai"></tbody></table></div></div></div></div>
+    
+    <div id="modal-admin-bank-ujian" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-admin-bank-ujian')"><div class="modal-box"><div class="modal-header" style="background:#fdebd0;"><h3 style="color:#e67e22; margin:0;">📥 Bank Soal Ujian</h3><button class="close-btn" onclick="tutupModal('modal-admin-bank-ujian')">✕</button></div><div class="modal-body"><input type="text" id="admin-bu-nama" class="input-box" placeholder="Nama Paket Ujian"><textarea id="admin-bu-text" class="input-box" rows="8" placeholder="Format Pilihan Ganda:&#10;Soal: Siapa penemu sel?&#10;A. Hooke&#10;B. Darwin&#10;C. Louis&#10;D. Mendel&#10;Kunci: A&#10;Pembahasan: ..."></textarea><button class="btn-action" style="background:#e67e22;" onclick="simpanKeBankUjian()">Simpan 💾</button></div></div></div>
+    
+    <div id="modal-manajer-ujian" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-manajer-ujian')"><div class="modal-box" style="width: 600px;"><div class="modal-header" style="background:#fdebd0;"><h3 style="color:#d35400;margin:0;">🗂️ Manajer Ujian</h3><button class="close-btn" onclick="tutupModal('modal-manajer-ujian')">✕</button></div><div class="modal-body"><ul id="list-manajer-ujian" class="soal-manager-list"></ul></div></div></div>
+
+    <div id="modal-admin-bank-soal" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-admin-bank-soal')"><div class="modal-box" style="width:600px;"><div class="modal-header" style="background:#f4ecf7;"><h3 style="color:#8e44ad; margin:0;">📥 Arsip Latihan Mandiri</h3><button class="close-btn" onclick="tutupModal('modal-admin-bank-soal')">✕</button></div><div class="modal-body"><div style="display:flex;gap:8px;margin-bottom:10px;"><select id="admin-bs-kelas" class="input-box"><option value="Kelas 10">Kls 10</option><option value="Kelas 11">Kls 11</option><option value="Kelas 12">Kls 12</option><option value="SD">SD</option><option value="SMP">SMP</option></select><select id="admin-bs-mapel" class="input-box"><option value="Biologi">Biologi</option><option value="Fisika">Fisika</option><option value="Matematika">Mat</option></select><input type="text" id="admin-bs-bab" class="input-box" list="admin-bab-list" placeholder="Bab"><select id="admin-bs-kesulitan" class="input-box"><option value="C1">C1</option><option value="C2">C2</option><option value="HOTS">HOTS</option><option value="TKA">TKA</option></select></div><textarea id="admin-bs-text" class="input-box" rows="8" placeholder="Paste soal pilihan ganda atau isian singkat..."></textarea><button class="btn-action" style="background:#8e44ad;" onclick="simpanKeBankSoalPusat()">Arsipkan 💾</button></div></div></div>
+    
+    <div id="modal-manajer-soal" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-manajer-soal')"><div class="modal-box" style="width: 650px; max-height: 85vh;"><div class="modal-header" style="background:#fdebd0;"><h3 style="color:#d35400;margin:0;">🗂️ Manajer Latihan</h3><button class="close-btn" onclick="tutupModal('modal-manajer-soal')">✕</button></div><div class="modal-body" style="padding-top:15px;"><div style="display:flex; gap:10px; margin-bottom:15px;"><select id="filter-manajer-kelas" class="input-box" style="margin-bottom:0;" onchange="window.renderManajerSoal()"><option value="Semua">Semua Kelas</option></select></div><ul id="list-manajer-soal" class="soal-manager-list"></ul></div></div></div>
+
+    <div id="modal-welcome-popup" class="modal-overlay" style="z-index:6000;" onclick="if(event.target===this)tutupWelcomePopup()">
+        <div class="popup-welcome-box">
+            <button class="close-btn" style="position:absolute;top:15px;right:20px;" onclick="tutupWelcomePopup()">✕</button>
+            <div style="text-align:left; margin-bottom:10px; display:none;" id="popup-img-tool">
+                <button onclick="document.getElementById('popup-img-upload').click()" style="background:#3498db; color:white; border:none; padding:6px 12px; border-radius:4px; font-size:12px; cursor:pointer; font-weight:bold;">🖼️ Sisipkan Gambar</button>
+                <input type="file" id="popup-img-upload" style="display:none;" accept="image/*" onchange="window.uploadPopupImg(this)">
+            </div>
+            <div id="popup-content-box" class="popup-content-area content-block" data-width="XL"></div>
+            <button class="btn-save-popup" onclick="simpanPopupPengumuman()">💾 Simpan & Tampilkan</button>
+        </div>
+    </div>
+
+    <div id="modal-glosarium-edit" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-glosarium-edit')"><div class="modal-box" style="width:400px;"><div class="modal-header"><h3>💡 Buat Istilah</h3><button class="close-btn" onclick="tutupModal('modal-glosarium-edit')">✕</button></div><div class="modal-body"><textarea id="glosarium-input-text" class="input-box" rows="4"></textarea><button class="btn-action" style="background:#f39c12;" onclick="terapkanPopUpIstilah()">Terapkan</button></div></div></div>
+    <div id="modal-button-edit" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-button-edit')"><div class="modal-box" style="width:400px;"><div class="modal-header"><h3>🔘 Tombol</h3><button class="close-btn" onclick="tutupModal('modal-button-edit')">✕</button></div><div class="modal-body"><input type="text" id="btn-text-input" class="input-box" placeholder="Teks"><select id="btn-internal-select" class="input-box"></select><input type="text" id="btn-external-input" class="input-box" placeholder="Link Eksternal"><button class="btn-action" style="background:#0b3954;" onclick="terapkanCustomButton()">Sisipkan</button></div></div></div>
+<div id="modal-ai-quiz" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-ai-quiz')"><div class="modal-box"><div class="modal-header" style="background:#e8f5e9;"><h3 style="color:#2e7d32;margin:0;">🤖 Ekstrak & Kuis AI</h3><button type="button" class="close-btn" onclick="document.getElementById('modal-ai-quiz').style.display='none'">✕</button></div><div class="modal-body"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;"><span style="font-size:12px; font-weight:bold; color:#2e7d32;">Input Soal / Materi:</span><button type="button" onclick="window.triggerUploadPDFKe('ai-quiz-topic')" style="background:#e74c3c; color:#fff; border:none; padding:5px 12px; border-radius:5px; font-size:11px; cursor:pointer; font-weight:bold;">📄 Upload PDF (AI)</button></div><textarea id="ai-quiz-topic" class="input-box" rows="5" placeholder="Paste soal pilihan ganda / isian singkat, atau upload PDF di atas..."></textarea><select id="ai-quiz-count" class="input-box"><option value="5">5 Soal</option><option value="10">10 Soal</option><option value="20">20 Soal</option><option value="999">Semua Soal</option></select><div style="display:flex; gap:10px;"><button type="button" class="btn-action" style="background:#2e7d32; flex:1;" onclick="window.prosesGenerateQuizAI('replace')">🔄 Ekstrak Ulang (Ganti)</button><button type="button" class="btn-action" style="background:#2980b9; flex:1;" onclick="window.prosesGenerateQuizAI('append')">➕ Tambahkan Soal</button></div></div></div></div>    
+    <div id="modal-theme" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-theme')"><div class="modal-box" style="width:450px;"><div class="modal-header"><h3>🎨 Theme & Layout</h3><button class="close-btn" onclick="tutupModal('modal-theme')">✕</button></div><div class="modal-body"><label style="font-size:12px; font-weight:bold;">Warna Web:</label><input type="color" id="theme-color" class="input-box" style="height:40px;"><label style="font-size:12px; font-weight:bold;">Font Dasar:</label><select id="theme-font" class="input-box"><option value="'Quicksand', sans-serif">Quicksand</option><option value="'Montserrat', sans-serif">Montserrat</option></select><label style="font-size:12px; font-weight:bold; margin-top:10px;">Padding Header (Atas-Bawah):</label><input type="range" id="theme-header-padding" min="10" max="100" value="20" class="input-box" style="height:40px;"><button class="btn-action" style="background:#27ae60; margin-top:20px;" onclick="simpanTema()">Save Theme</button></div></div></div>
+    
+    <div id="modal-pages" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-pages')"><div class="modal-box"><div class="modal-header"><h3>⚙️ Pages</h3><button class="close-btn" onclick="tutupModal('modal-pages')">✕</button></div><div class="modal-body"><button class="btn-action" style="margin-bottom:20px;" onclick="tambahHalamanBaru(0)">⊕ Add Page</button><ul class="page-list" id="sortable-list"></ul></div></div></div>
+    <div id="modal-link" class="modal-overlay" onclick="if(event.target===this)tutupModal('modal-link')"><div class="modal-box" style="width:400px;"><div class="modal-header"><h3>🔗 Link</h3><button class="close-btn" onclick="tutupModal('modal-link')">✕</button></div><div class="modal-body"><select id="link-internal-select" class="input-box"></select><input type="text" id="link-external-input" class="input-box"><button class="btn-action" onclick="terapkanHyperlink()">Apply Link</button></div></div></div>
+    
+    <div id="modal-quiz-result" class="modal-overlay" style="z-index:999999;" onclick="if(event.target===this)window.tutupModalHasilQuiz()"><div class="modal-box" style="width:350px;text-align:center;"><div class="modal-body" style="padding:30px;"><h2 style="margin:0 0 10px 0;color:#2c3e50;">Selesai! 🎉</h2><h1 style="font-size:70px;color:#3498db;margin:10px 0;" id="quiz-result-score">100</h1><p style="font-size:14px;color:#7f8c8d;">Benar <b id="quiz-result-correct" style="color:#27ae60;">0</b> dari <b id="quiz-result-total">0</b></p><button class="btn-action" style="margin-top:20px;background:#3498db; margin-bottom:10px;" onclick="window.tutupModalHasilQuiz()">Tutup / Lihat Pembahasan</button><button class="btn-action" id="btn-remedial" style="background:#e74c3c; display:none;" onclick="triggerRemedialOtomatis()">🔥 Mulai Remedial (C1/C2)</button></div></div></div>
+
+    <div class="right-edge-adder" onclick="tambahBlokBaruAkhir()">⊕ Add block</div>
+    
+  <!-- HEADER & NAVBAR -->
+    <div class="header-wrapper" id="header-wrap" ondblclick="window.loginGuru()">
+        <button class="header-popup-btn" onclick="window.bukaWelcomePopup();event.stopPropagation();" title="Pengumuman Popup" style="position:absolute; left:20px; top:20px; z-index:999; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.5); color:#fff; padding:5px 15px; border-radius:20px; font-family:'Poppins'; font-weight:bold; cursor:pointer; display:none;">📢 Popup</button>
+        <script>if(sessionStorage.getItem("statusGuru")==="aktif") document.querySelector('.header-popup-btn').style.display='block';</script>
+        
+        <!-- TOMBOL LOGOUT BARU (Kanan Atas, Sebelah Kiri Setting) -->
+        <button class="header-logout-btn" onclick="window.logoutGuru();event.stopPropagation();" title="Keluar / Logout" style="position:absolute; right:60px; top:20px; z-index:999; background:#e74c3c; border:1px solid #c0392b; color:#fff; padding:5px 15px; border-radius:20px; font-family:'Poppins'; font-weight:bold; cursor:pointer; display:none;">🚪 Logout</button>
+        <script>if(sessionStorage.getItem("statusGuru")==="aktif") document.querySelector('.header-logout-btn').style.display='block';</script>
+
+        <span class="header-settings-btn" onclick="bukaModal('modal-theme');event.stopPropagation();">⚙️</span>
+        <h1 class="header-title" id="web-title">Mahardika</h1>
+    </div>
+
+    <!-- INI ADALAH NAVBAR YANG HILANG SEBELUMNYA -->
+    <div class="navbar" id="main-nav">
+        <ul id="dynamic-navbar"></ul>
+    </div>
+    
+    <!-- ADMIN MENU BAR -->
+    <div id="admin-menu-bar" class="admin-menu-bar">
+        <span onclick="window.bukaModal('modal-pages')">⚙️ Pages</span>
+        <span onclick="window.bukaModal('modal-admin-bank-soal')">📥 Bank Latihan</span>
+        <span onclick="window.bukaModalManagerSoal()">🗂️ Manajer Latihan</span>
+        <span onclick="window.bukaModal('modal-admin-bank-ujian')">📥 Bank Ujian</span>
+        <span onclick="window.bukaModalManajerUjian()">🗂️ Manajer Ujian</span>
+        <span onclick="window.bukaModalKontrolUjian()">📝 Kontrol Ujian</span>
+        <span onclick="window.bukaModalRekapNilai()">📊 Rekap Nilai</span>
+        <span id="btn-menu-administrasi" onclick="window.bukaModalAdministrasi('pilihan')" style="color:#0b3954; background:#e8f4f8; border:1px solid #aed6f1; border-radius:6px; padding:4px 10px; font-weight:bold;">📁 Administrasi</span>
+        <span onclick="window.bukaModalLiveMonitor()" style="color:#c0392b; border-left: 1px solid #ccc; padding-left:10px; position:relative;">
+            📡 Live Monitor 
+            <span id="badge-notif" class="badge-notif-pulse" style="display:none;">!</span>
+        </span>
+        <!-- TOMBOL SALIN LINK MURID BARU -->
+        <span onclick="window.salinLinkMurid()" style="color:#fff; background:#e67e22; border:1px solid #d35400; border-radius:6px; margin-left:5px;">🔗 Salin Link Murid</span>
+    </div>
+
+    <!-- ALAT GAMBAR -->
+    <div id="pen-tools">
+        <div style="display:flex; gap:8px;">
+            <button class="col-btn" style="background:#f1c40f;" onclick="setPenColor('#f1c40f', this)"></button>
+            <button class="col-btn active" style="background:#e74c3c; border-color:white;" onclick="setPenColor('#e74c3c', this)"></button>
+            <button class="col-btn" style="background:#39ff14;" onclick="setPenColor('#39ff14', this)"></button>
+            <button class="col-btn" style="background:#192a56;" onclick="setPenColor('#192a56', this)"></button>
+            <button class="col-btn" style="background:#7f8c8d;" onclick="setPenColor('#7f8c8d', this)"></button>
+        </div>
+        <div style="width:1px; height:24px; background:rgba(255,255,255,0.2); margin:0 5px;"></div>
+        <div style="display:flex;gap:4px;">
+            <button class="sz-btn" onclick="setPenSize(2, this)">S</button>
+            <button class="sz-btn active" onclick="setPenSize(4, this)">M</button>
+            <button class="sz-btn" onclick="setPenSize(8, this)">L</button>
+            <button class="sz-btn" onclick="setPenSize(12, this)">XL</button>
+        </div>
+        <div style="width:1px; height:24px; background:rgba(255,255,255,0.2); margin:0 5px;"></div>
+        <button class="tool-btn" onclick="window.undoDraw()" style="background:#34495e; color:white; border-color:#2c3e50;" title="Batal (Undo)">↩️</button>
+        <button class="tool-btn" onclick="window.redoDraw()" style="background:#34495e; color:white; border-color:#2c3e50; margin-right:5px;" title="Ulangi (Redo)">↪️</button>
+        <button id="btn-pen" class="tool-btn active" onclick="setDrawingTool('pen')">✏️ Pena</button>
+        <button id="btn-highlighter" class="tool-btn" onclick="setDrawingTool('highlighter')">🖍️ Stabilo</button>
+        <button id="btn-line" class="tool-btn" onclick="setDrawingTool('line')">📏 Garis</button>
+        <button id="btn-laser" class="tool-btn" onclick="setDrawingTool('laser')">🔴 Laser</button>
+        <button id="btn-eraser" class="tool-btn" onclick="setDrawingTool('eraser')">🧽 Hapus</button>
+        <button id="btn-lasso" class="tool-btn" onclick="setDrawingTool('lasso')">✂️ Laso</button>
+        <div style="width:1px; height:24px; background:rgba(255,255,255,0.2); margin:0 5px;"></div>
+        <label style="font-size:12px; display:flex; align-items:center; gap:5px; cursor:pointer; font-weight:bold; color:white; background:rgba(255,255,255,0.1); padding:4px 10px; border-radius:6px;">
+            <input type="checkbox" id="palm-reject" onchange="togglePalmReject(this.checked)" checked> Palm Reject (iPad)
+        </label>
+        <div style="flex:1;"></div>
+        <button class="tool-btn" style="color:#ff7675; border-color:#ff7675;" onclick="clearSemuaCoretan()">🗑️ Clear</button>
+        <button class="tool-btn" onclick="toggleDrawingMode()" style="background:#e74c3c; color:white; border-color:#e74c3c;">✕ Tutup</button>
+    </div>
+
+    <!-- TOOLBAR RESPONSIVE -->
+    <div class="toolbar-wrapper">
+        <div class="mozello-toolbar" id="toolbar">
+            <div class="toolbar-group"><button onclick="document.execCommand('undo')" style="font-size:14px;">↩️</button><button onclick="document.execCommand('redo')" style="font-size:14px;margin-right:2px;">↪️</button>
+                <select onchange="formatTeks('fontName', this.value);this.selectedIndex=0;" style="width:70px;">
+                    <option value="" disabled selected>Font</option>
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value="'Georgia', serif">Georgia</option>
+                    <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                    <option value="'Chalkboard', 'Comic Sans MS', cursive">Chalkboard</option>
+                    <option value="'Courier New', Courier, monospace">Courier</option>
+                    <option value="Verdana, sans-serif">Verdana</option>
+                    <option value="Tahoma, sans-serif">Tahoma</option>
+                </select>
+                <select onchange="aturUkuranFont(this.value);this.selectedIndex=0;" style="width:55px;">
+                    <option value="" disabled selected>Size</option>
+                    <option value="1">10pt</option>
+                    <option value="3">16pt</option>
+                    <option value="4">18pt</option>
+                    <option value="5">24pt</option>
+                    <option value="7">48pt</option>
+                </select>
+                <select onchange="formatTeks('formatBlock', this.value);this.selectedIndex=0;" style="width:65px;"><option value="" disabled selected>Style</option><option value="P">Normal</option><option value="H1">Title</option><option value="H2">Sub</option><option value="BLOCKQUOTE">Quote</option></select>
+                <select onchange="aturSpasiParagraf(this.value);this.selectedIndex=0;" style="width:70px;">
+                    <option value="" disabled selected>Space</option>
+                    <option value="line-1.0">1.0 (Single)</option>
+                    <option value="line-1.15">1.15</option>
+                    <option value="line-1.5">1.5</option>
+                    <option value="line-2.0">2.0 (Double)</option>
+                    <option value="add-before">+Before</option>
+                    <option value="add-after">+After</option>
+                    <option value="remove-space">-Space</option>
+                </select>
+            </div>
+            
+            <div class="toolbar-group">
+                <button onclick="formatTeks('bold')"><b>B</b></button>
+                <button onclick="formatTeks('italic')"><i>I</i></button>
+                <button onclick="formatTeks('underline')"><u>U</u></button>
+                <button onclick="formatTeks('superscript')" title="Pangkat Atas" style="font-weight:bold;">X²</button>
+            </div>
+            
+            <div class="toolbar-group"><div class="color-picker-wrapper"><span style="color:#e74c3c;font-weight:bold;">A</span><input type="color" onchange="formatTeks('foreColor', this.value)" value="#111111"></div><div class="color-picker-wrapper"><span style="background:#f1c40f;font-weight:bold;padding:0 2px;">A</span><input type="color" onchange="formatTeks('hiliteColor', this.value)" value="#f1c40f"></div><button onclick="formatTeks('removeFormat')">🧽</button></div>
+            <div class="toolbar-group"><button onclick="formatTeks('insertUnorderedList')">●—</button><button onclick="formatTeks('insertOrderedList')">1—</button><button onclick="formatTeks('outdent')">⇥</button><button onclick="formatTeks('indent')">↦</button></div>
+            <div class="toolbar-group"><button onclick="formatTeks('justifyLeft')">⫷</button><button onclick="formatTeks('justifyCenter')">≡</button><button onclick="formatTeks('justifyRight')">⫸</button></div>
+            <div class="toolbar-group">
+                <button onclick="bukaModalGlosarium()">💡 Is</button>
+                <button onclick="hapusIstilah()" style="color:#e74c3c;" title="Hapus Istilah">🚫 Is</button>
+                <button onclick="bukaModalCustomButton()">🔘 Btn</button>
+                <button onclick="bukaModalHyperlink()">🔗</button>
+                <button onclick="document.getElementById('image-upload-input').click()">🖼️</button>
+                <button onclick="document.getElementById('pdf-materi-upload').click()" title="Sisipkan Slide PDF">📄 PDF</button>
+                <input type="file" id="pdf-materi-upload" accept="application/pdf" style="display:none" onchange="window.prosesUploadPDFMateri(this)">
+                <button onclick="sisipkanTabel()">▦</button>
+                <button onclick="tanyaAIText()" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-weight:bold;margin-left:2px;">🤖 AI</button>
+                <button onclick="sisipkanBlokKuis()" style="background:#fdedec;color:#c0392b;border:1px solid #fadbd8;font-weight:bold;margin-left:2px;">🧩 Kuis</button>
+                <button onclick="bukaModalSimbol()" style="background:#e8f4f8;color:#2980b9;border:1px solid #aed6f1;font-weight:bold;margin-left:2px;">Σ Simbol</button>
+                <button onclick="renderMathJax()" style="background:#f9e79f;color:#d35400;border:1px solid #f5b041;font-weight:bold;margin-left:2px;">🧮 LaTeX</button>
+                <button onclick="tambahFloatingBox()" style="background:#f1f2f6;border:1px solid #dcdde1;margin-left:2px;font-weight:bold;color:#2c3e50;">🔲 Shape</button>
+                <button onclick="toggleDrawingMode()" style="background:#ffeaa7;font-weight:bold;border:1px solid #fdcb6e;margin-left:3px;padding:3px 8px;">🖍️ Draw</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN EDITOR -->
+    <div class="editor-wrapper" id="main-editor-wrapper" ondblclick="if(document.body.classList.contains('mode-edit-aktif') && event.target.closest('mjx-container')) window.restoreMathJax()">
+        <div id="blocks-container" style="width:100%; display:flex; flex-direction:column; align-items:center;"></div>
+        <div id="floating-boxes-container"></div>
+        <div class="image-controls" id="img-controls"><button onclick="alignGambar('left')">⫷</button><button onclick="alignGambar('center')">≡</button><button onclick="alignGambar('right')">⫸</button></div>
+        <div class="table-controls" id="tbl-controls"><input type="color" onchange="warnaiSelTabel(this.value)" value="#ffffff"><div style="width:1px;height:12px;background:#ddd;margin:0 3px;"></div><button onclick="tambahBarisTabel()">+Row</button><button onclick="tambahKolomTabel()">+Col</button><button onclick="hapusBarisTabel()">-Row</button><button onclick="hapusKolomTabel()">-Col</button></div>
+    </div>
+
+    <!-- SIDEBAR SETTINGS -->
+    <div id="sidebar-block" class="sidebar-settings">
+        <div class="side-header"><h3>Settings</h3><button class="close-btn" onclick="document.getElementById('sidebar-block').classList.remove('open')">✕</button></div>
+        <div class="side-body">
+            <div class="setting-group">
+                <label>Background Color</label>
+                <div class="color-circles">
+                    <div class="color-circle" style="background:#ffffff;border:1px solid #eee;" onclick="ubahStyleBlok('bg','#ffffff')"></div>
+                    <div class="color-circle" style="background:#f8f9fa;" onclick="ubahStyleBlok('bg','#f8f9fa')"></div>
+                    <div class="color-circle" style="background:#fce94f;" onclick="ubahStyleBlok('bg','#fce94f')"></div>
+                    <div class="color-circle" style="background:#0b3954;" onclick="ubahStyleBlok('bg','#0b3954')"></div>
+                </div>
+            </div>
+            <div class="setting-group" style="margin-top:-10px;">
+                <label>Background Pattern</label>
+                <div class="size-btns" style="flex-wrap: wrap;">
+                    <button class="size-btn" onclick="ubahPolaBkg('')" style="font-weight:normal;">Polos</button>
+                    <button class="size-btn bg-pattern-lines" onclick="ubahPolaBkg('bg-pattern-lines')" style="font-weight:normal;">Buku</button>
+                    <button class="size-btn bg-pattern-grid" onclick="ubahPolaBkg('bg-pattern-grid')" style="font-weight:normal;">Grid</button>
+                    <button class="size-btn bg-pattern-dots" onclick="ubahPolaBkg('bg-pattern-dots')" style="font-weight:normal;">Dots</button>
+                </div>
+            </div>
+            <div class="setting-group">
+                <label>Width</label>
+                <div class="size-btns">
+                    <button class="size-btn" onclick="ubahStyleBlok('width','M')">M</button>
+                    <button class="size-btn" onclick="ubahStyleBlok('width','L')">L</button>
+                    <button class="size-btn" onclick="ubahStyleBlok('width','XL')">Full</button>
+                </div>
+            </div>
+            <div class="setting-group">
+                <label>Top Padding</label>
+                <div class="slider-container">
+                    <input type="range" min="0" max="150" value="40" oninput="ubahStyleBlok('padTop',this.value+'px');this.nextElementSibling.innerText=this.value+'px';">
+                    <span class="slider-val" id="val-padtop">40px</span>
+                </div>
+            </div>
+            <div class="setting-group">
+                <label>Bottom Padding</label>
+                <div class="slider-container">
+                    <input type="range" min="0" max="150" value="40" oninput="ubahStyleBlok('padBot',this.value+'px');this.nextElementSibling.innerText=this.value+'px';">
+                    <span class="slider-val" id="val-padbot">40px</span>
+                </div>
+            </div>
+            <div style="border-top:1px solid #eee;margin-top:10px;padding-top:15px;">
+                <button class="btn-action" style="background:#27ae60;" onclick="tambahBlokBaruTengah()">⊕ Add Section Below</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MENGHUBUNGKAN KE FILE JAVASCRIPT KITA -->
+    <script src="js/main.js"></script>
+    <script type="module" src="js/firebase-db.js"></script>
+</body>
+</html>
