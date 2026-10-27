@@ -4274,3 +4274,193 @@ window.updateDatalistSiswaUjian = function() {
     // Kosongkan nama jika kelas diganti
     document.getElementById('input-nama-siswa').value = ''; 
 };
+
+// ============================================================================
+// PATCH TAMBAHAN: FITUR CATATAN SISWA (TO-DO LIST) & UNIVERSAL FULLSCREEN (IOS/ANDROID)
+// ============================================================================
+
+// 1. Modifikasi Tabel Absensi untuk Menambahkan Tombol Catatan (Notes)
+window.renderTabelAbsensiKelas = function() {
+    var wadah = document.getElementById('wadah-tabel-absensi');
+    if (!wadah) return;
+    var kls = window.kelasAbsensiAktif || (window.ambilDaftarKelasAktif ? window.ambilDaftarKelasAktif()[0] : '');
+    if (!kls) return;
+    var dataKls = window.pastikanStrukturAbsensiKelas(kls);
+    var tglList = dataKls.tanggalList;
+    var siswaList = dataKls.siswaList;
+
+    var headerTglHtml = tglList.map(function(tgl, tIdx) {
+        return '<th style="text-align:center; min-width:75px;">' +
+            '<div contenteditable="true" onblur="window.ubahJudulTanggalAbsensi(' + tIdx + ', this.innerText)" style="outline:none; border-bottom:1px dashed rgba(255,255,255,0.4); padding-bottom:2px;">' + tgl + '</div>' +
+            '<button type="button" onclick="window.hapusKolomTanggalAbsensi(' + tIdx + ')" title="Hapus Kolom" style="background:none;border:none;color:#f8d7da;font-size:10px;cursor:pointer;margin-top:2px;">✕</button>' +
+        '</th>';
+    }).join('');
+
+    var rowsHtml = '';
+    if (siswaList.length === 0) {
+        rowsHtml = '<tr><td colspan="' + (tglList.length + 7) + '" style="text-align:center; padding:25px; color:#94a3b8;">Belum ada daftar siswa di kelas <b>' + kls + '</b>. Klik tombol <b>👤 + Tambah Siswa</b> di kanan atas.</td></tr>';
+    } else {
+        rowsHtml = siswaList.map(function(s, sIdx) {
+            var hadir = 0, sakit = 0, izin = 0, alfa = 0;
+            var kehadiranMap = s.kehadiran || {};
+            var cellsHtml = tglList.map(function(tgl, tIdx) {
+                var st = kehadiranMap[tIdx] || '-';
+                if (st === 'H') hadir++;
+                else if (st === 'S') sakit++;
+                else if (st === 'I') izin++;
+                else if (st === 'A') alfa++;
+                var clsStatus = st !== '-' ? ('status-' + st) : '';
+                return '<td class="absensi-cell-status ' + clsStatus + '" onclick="window.toggleStatusKehadiran(' + sIdx + ', ' + tIdx + ')">' + st + '</td>';
+            }).join('');
+
+            // LOGIKA TOMBOL CATATAN (Ganti warna/ikon jika ada isinya)
+            var hasCatatan = (s.catatan && s.catatan.trim() !== "");
+            var iconBtn = hasCatatan ? '📝' : '📄';
+            var colorBtn = hasCatatan ? '#e74c3c' : '#bdc3c7'; // Warna merah jika ada catatan (sesuai gambar)
+            var animasi = hasCatatan ? 'text-shadow: 0 2px 4px rgba(231, 76, 60, 0.4);' : '';
+
+            return '<tr>' +
+                '<td style="text-align:center; width:40px;">' + (sIdx + 1) + '</td>' +
+                '<td style="min-width:200px; padding-right:8px;">' +
+                    '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+                        '<span contenteditable="true" onblur="window.ubahNamaSiswaAbsensi(' + sIdx + ', this.innerText)" style="font-weight:600; flex:1; outline:none;">' + s.nama + '</span>' +
+                        '<button type="button" onclick="window.bukaCatatanSiswa(' + sIdx + ')" style="background:none; border:none; cursor:pointer; font-size:16px; color:' + colorBtn + '; ' + animasi + '" title="Catatan Siswa">' + iconBtn + '</button>' +
+                    '</div>' +
+                '</td>' +
+                cellsHtml +
+                '<td style="text-align:center; font-weight:bold; color:#155724; background:#f0fdf4;">' + hadir + '</td>' +
+                '<td style="text-align:center; font-weight:bold; color:#856404; background:#fefce8;">' + sakit + '</td>' +
+                '<td style="text-align:center; font-weight:bold; color:#004085; background:#eff6ff;">' + izin + '</td>' +
+                '<td style="text-align:center; font-weight:bold; color:#721c24; background:#fef2f2;">' + alfa + '</td>' +
+                '<td style="text-align:center;"><button type="button" onclick="window.hapusSiswaAbsensi(' + sIdx + ')" style="background:none;border:none;cursor:pointer;">🗑️</button></td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    wadah.innerHTML =
+        '<table class="excel-table" id="tabel-excel-absensi">' +
+            '<thead>' +
+                '<tr>' +
+                    '<th style="text-align:center; width:40px;">No</th>' +
+                    '<th>Nama Siswa</th>' +
+                    headerTglHtml +
+                    '<th style="text-align:center; background:#16a085;">H</th>' +
+                    '<th style="text-align:center; background:#d35400;">S</th>' +
+                    '<th style="text-align:center; background:#2980b9;">I</th>' +
+                    '<th style="text-align:center; background:#c0392b;">A</th>' +
+                    '<th style="text-align:center; width:50px;">Aksi</th>' +
+                '</tr>' +
+            '</thead>' +
+            '<tbody>' + rowsHtml + '</tbody>' +
+        '</table>';
+};
+
+// 2. Fungsi Jendela Pop-up Modal Catatan (To-Do List 50% Layar)
+window.bukaCatatanSiswa = function(sIdx) {
+    var kls = window.kelasAbsensiAktif;
+    var dataKls = window.dataAbsensiGlobal[kls];
+    var siswa = dataKls.siswaList[sIdx];
+    
+    window.siswaCatatanAktifIndex = sIdx;
+
+    var m = document.getElementById('modal-catatan-siswa');
+    if (!m) {
+        var html = 
+        '<div id="modal-catatan-siswa" class="mahardika-modal-wrap" style="display:flex; z-index: 2147483647 !important;">' +
+            '<div class="mahardika-modal-card modal-box" style="width:50vw; min-width:340px; max-width:600px; height:60vh; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 15px 40px rgba(0,0,0,0.3); display:flex; flex-direction:column;">' +
+                '<div style="background:#f39c12; color:#fff; padding:15px 20px; display:flex; justify-content:space-between; align-items:center;">' +
+                    '<h3 id="catatan-siswa-judul" style="margin:0; font-size:16px; font-weight:bold;">Catatan Siswa</h3>' +
+                    '<button type="button" onclick="document.getElementById(\'modal-catatan-siswa\').style.display=\'none\'" style="background:rgba(0,0,0,0.15); border:none; color:#fff; width:30px; height:30px; border-radius:50%; font-size:14px; cursor:pointer; font-weight:bold;">✕</button>' +
+                '</div>' +
+                '<div style="padding:20px; flex:1; display:flex; flex-direction:column; background:#fef9e7;">' +
+                    '<textarea id="catatan-siswa-teks" placeholder="- Tugas 1 belum dikumpul\n- Perlu ikut remedial harian bab 1\n\n(Ketik daftar catatan atau to-do list di sini...)" style="flex:1; width:100%; padding:15px; border:1px solid #f1c40f; border-radius:8px; font-family:monospace; font-size:14px; resize:none; box-sizing:border-box; background:#fff; outline:none; box-shadow:inset 0 2px 5px rgba(0,0,0,0.03);"></textarea>' +
+                    '<button type="button" onclick="window.simpanCatatanSiswa()" style="background:#27ae60; color:#fff; border:none; padding:14px; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer; margin-top:15px; box-shadow:0 4px 6px rgba(39, 174, 96, 0.2);">💾 Simpan Catatan</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+        document.body.insertAdjacentHTML('beforeend', html);
+        m = document.getElementById('modal-catatan-siswa');
+    } else {
+        m.style.display = 'flex';
+    }
+
+    // Ubah judul menyesuaikan nama anak
+    document.getElementById('catatan-siswa-judul').innerText = "📝 Catatan " + siswa.nama;
+    document.getElementById('catatan-siswa-teks').value = siswa.catatan || "";
+};
+
+// Fungsi menyimpan catatan ke Firebase
+window.simpanCatatanSiswa = function() {
+    var sIdx = window.siswaCatatanAktifIndex;
+    var kls = window.kelasAbsensiAktif;
+    var teks = document.getElementById('catatan-siswa-teks').value;
+
+    if (window.dataAbsensiGlobal && window.dataAbsensiGlobal[kls] && window.dataAbsensiGlobal[kls].siswaList[sIdx]) {
+        window.dataAbsensiGlobal[kls].siswaList[sIdx].catatan = teks; // Tulis ke object
+        if (window.simpanAbsensiKeDB) {
+            window.simpanAbsensiKeDB().then(function() {
+                document.getElementById('modal-catatan-siswa').style.display = 'none';
+                if (window.tampilkanToastFullscreen) window.tampilkanToastFullscreen("✓ Catatan " + window.dataAbsensiGlobal[kls].siswaList[sIdx].nama + " berhasil disimpan!");
+                window.renderTabelAbsensiKelas(); // Render ulang agar ikon merah muncul
+            });
+        }
+    }
+};
+
+// 3. UNIVERSAL FULLSCREEN PATCH (Memaksa Fullscreen di iOS/iPhone & Android)
+// Injeksi CSS Khusus untuk mensimulasikan Fullscreen di perangkat Apple (iOS Safari)
+if (!document.getElementById('ios-fs-style')) {
+    var st = document.createElement('style');
+    st.id = 'ios-fs-style';
+    st.innerHTML = `
+        .ios-pseudo-fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 2147483647 !important;
+            background: #f8f9fa !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding-bottom: env(safe-area-inset-bottom) !important;
+        }
+    `;
+    document.head.appendChild(st);
+}
+
+// Menulis Ulang Logika Tombol Fullscreen Bawaan
+window.toggleFullScreen = function() {
+    var doc = window.document;
+    var elem = doc.documentElement;
+
+    // Deteksi API Fullscreen bawaan
+    var reqFS = elem.requestFullscreen || elem.mozRequestFullScreen || elem.webkitRequestFullscreen || elem.msRequestFullscreen;
+    var exitFS = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+
+    var isNativeFSEnabled = !!(doc.fullscreenElement || doc.mozFullScreenElement || doc.webkitFullscreenElement || doc.msFullscreenElement);
+    var isCssFS = document.body.classList.contains('ios-pseudo-fullscreen');
+
+    // Jika saat ini TIDAK dalam keadaan fullscreen
+    if (!isNativeFSEnabled && !isCssFS) {
+        if (reqFS) {
+            reqFS.call(elem).catch(function(err) {
+                // Jika ditolak oleh browser (seperti iOS Safari pada iPhone), paksa pakai CSS
+                console.log("Native Fullscreen ditolak/tidak didukung. Mengaktifkan CSS Fallback untuk iPhone/iOS.");
+                document.body.classList.add('ios-pseudo-fullscreen');
+            });
+        } else {
+            // Jika API benar-benar tidak ada di browser tersebut
+            document.body.classList.add('ios-pseudo-fullscreen');
+        }
+        sessionStorage.setItem('autoFS', 'true');
+    } 
+    // Jika sedang dalam keadaan fullscreen (keluar)
+    else {
+        if (isNativeFSEnabled && exitFS) {
+            exitFS.call(doc);
+        }
+        document.body.classList.remove('ios-pseudo-fullscreen');
+        sessionStorage.removeItem('autoFS');
+    }
+};
