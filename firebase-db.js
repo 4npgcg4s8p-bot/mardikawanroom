@@ -4975,22 +4975,16 @@ window.uploadKeImgBB = async function(fileOrBase64) {
     var apiKey = "d2b70b55ec70f443b7e4529f79b69152";
     var formData = new FormData();
 
-    // Jika berupa objek File (seperti lampiran foto praktikum), kirim langsung agar 100% aman
     if (fileOrBase64 instanceof File || fileOrBase64 instanceof Blob) {
         formData.append("image", fileOrBase64);
     } else {
-        // Jika terpaksa base64, hilangkan spasi dan enter yang membuat API ImgBB menolak (Error 400)
         var b64str = fileOrBase64.includes(',') ? fileOrBase64.split(',')[1] : fileOrBase64;
-        b64str = b64str.replace(/\s+/g, '');
-        formData.append("image", b64str);
+        formData.append("image", b64str.replace(/\s+/g, ''));
     }
 
-    var res = await fetch("https://api.imgbb.com/1/upload?key=" + apiKey, {
-        method: "POST",
-        body: formData
-    });
+    var res = await fetch("https://api.imgbb.com/1/upload?key=" + apiKey, { method: "POST", body: formData });
     var data = await res.json();
-    if (!data.success) throw new Error(data.error ? data.error.message : "Cloud server gagal merespon.");
+    if (!data.success) throw new Error(data.error ? data.error.message : "Cloud server sibuk.");
     return data.data.url;
 };
 
@@ -5022,10 +5016,9 @@ window.kirimLaporanPraktikum = async function(event) {
         var fileInput = document.getElementById('prak-lampiran');
         if (fileInput.files && fileInput.files[0]) {
             statusEl.innerHTML = "<span style='color:#f39c12;'>☁️ Mengunggah foto lampiran ke Cloud...</span>";
-            // KUNCI PERBAIKAN: Kirim file aslinya, BUKAN teks Base64
             lampiranUrl = await window.uploadKeImgBB(fileInput.files[0]);
         }
-
+      
         var payload = {
             judul: judul, kelas: kelas, nama: ketua, ketua: ketua,
             ang1: document.getElementById('prak-ang1').value.trim(),
@@ -5064,7 +5057,7 @@ window.kirimLaporanPraktikum = async function(event) {
     }
 };
 
-// 2. PERBAIKAN NOTIFIKASI SIMPAN DI MANAJER LATIHAN (TOMBOL)
+// PERBAIKAN NOTIFIKASI SIMPAN DI MANAJER LATIHAN & UJIAN
 setInterval(function() {
     var semuaTombol = document.querySelectorAll('button');
     semuaTombol.forEach(function(btn) {
@@ -5140,7 +5133,7 @@ setInterval(function() {
 
                     textarea.value = '';
                     
-                    // KUNCI PERBAIKAN: Berikan Notifikasi Toast dan Indikator Status Simpan
+                    // --- BAGIAN NOTIFIKASI YANG DITAMBAHKAN ---
                     window.tampilkanToastFullscreen("✅ " + arrSoalBaru.length + " Soal berhasil disimpan ke bank data!");
                     var sb = document.getElementById('save-status-bar');
                     if (sb) {
@@ -5159,10 +5152,10 @@ setInterval(function() {
     });
 }, 1000);
 
-// 3. UPGRADE AI: KEMBALIKAN KECERDASAN MODEL (Tanpa Pemotongan Berlebih)
+// UPGRADE AI: KEMBALIKAN KECERDASAN MODEL DAN BATAS BACAAN
 window.requestKeGeminiDenganFallback = async function(teksPrompt) {
     var apiKey = window.ambilKunciAPIAman();
-    // Kembalikan ke model cerdas (Gemini 2.0 Flash) sebagai prioritas utama
+    // Prioritaskan model Gemini paling cerdas
     var bestModels = [
         "models/gemini-2.0-flash",
         "models/gemini-2.0-flash-lite",
@@ -5173,13 +5166,13 @@ window.requestKeGeminiDenganFallback = async function(teksPrompt) {
         contents: [{ parts: [{ text: teksPrompt }] }],
         generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 8192 // Kembalikan batas token maksimal agar penjelasan tidak terpotong
+            maxOutputTokens: 8192 // Ditingkatkan ke batas maksimal agar jawaban panjang tidak terpotong
         }
     });
 
     for (var i = 0; i < bestModels.length; i++) {
         var controller = new AbortController();
-        // Beri waktu lebih lama agar AI bisa berpikir (15 detik)
+        // Beri waktu tunggu lebih lama (15 detik) agar AI bisa berpikir tuntas
         var timeoutId = setTimeout(function() { controller.abort(); }, 15000); 
         try {
             var url = 'https://generativelanguage.googleapis.com/v1beta/' + bestModels[i] + ':generateContent?key=' + apiKey;
