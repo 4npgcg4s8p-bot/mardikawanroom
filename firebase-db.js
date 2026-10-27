@@ -4529,3 +4529,439 @@ window.cetakPraktikumPDF = function(areaId, namaSiswa) {
         win.close(); 
     }, 800);
 };
+
+// ============================================================================
+// MASTER PATCH: LAPORAN PRAKTIKUM ILMIAH (COVER, DAFTAR ISI, PUSTAKA DINAMIS & PDF)
+// ============================================================================
+
+// 1. Desain Ulang Jendela Modal Praktikum (Form Siswa & Guru)
+(function rancangUlangModalPraktikum() {
+    var modalLama = document.getElementById('modal-praktikum');
+    if (modalLama) modalLama.remove();
+
+    var htmlModalPrak = `
+    <div id="modal-praktikum" class="mahardika-modal-wrap" style="display:none; z-index:999999;">
+        <div class="mahardika-modal-card modal-box" style="max-width:900px; height:92vh; display:flex; flex-direction:column; background:#f4f6f7;">
+            <div style="background:#2c3e50; color:#fff; padding:15px 20px; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; font-size:18px;">🧪 Laporan Praktikum Sains</h3>
+                <button type="button" onclick="document.getElementById('modal-praktikum').style.display='none'" style="background:rgba(255,255,255,0.2); border:none; color:#fff; width:32px; height:32px; border-radius:50%; font-size:16px; cursor:pointer;">✕</button>
+            </div>
+            
+            <div style="flex:1; overflow-y:auto; padding:20px;">
+                
+                <!-- TAMPILAN GURU (DASHBOARD KOREKSI & CETAK) -->
+                <div id="view-praktikum-guru" style="display:none; background:#fff; padding:20px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+                    <label style="font-weight:bold; color:#34495e;">📂 Pilih Laporan Siswa yang Masuk:</label>
+                    <select id="select-laporan-siswa" onchange="window.bukaLaporanSiswa()" style="width:100%; padding:12px; margin-top:8px; margin-bottom:20px; border:1px solid #bdc3c7; border-radius:6px; font-size:15px;"></select>
+                    <div id="tempat-laporan-guru" style="min-height:300px;"><i>Belum ada laporan yang dipilih.</i></div>
+                </div>
+
+                <!-- TAMPILAN SISWA (FORM KARYA TULIS ILMIAH) -->
+                <div id="view-praktikum-siswa" style="display:none; background:#fff; padding:25px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+                    <div style="background:#e8f8f5; border-left:4px solid #16a085; padding:15px; margin-bottom:20px; border-radius:4px;">
+                        <b style="color:#16a085;">Informasi:</b> Setelah dikumpulkan, sistem akan merangkai tulisanmu menjadi Dokumen PDF berformat Karya Tulis Ilmiah yang bisa langsung kamu Download.
+                    </div>
+                    
+                    <h4 style="color:#0b3954; border-bottom:2px solid #ecf0f1; padding-bottom:5px;">A. Identitas Praktikum</h4>
+                    <input type="text" id="prak-judul" placeholder="Judul Praktikum (Contoh: Uji Enzim Katalase Hati Ayam)" style="width:100%; padding:12px; margin-bottom:15px; border:1px solid #bdc3c7; border-radius:6px; font-weight:bold; font-size:15px; box-sizing:border-box;">
+                    
+                    <div style="display:grid; grid-template-columns:1fr 2fr; gap:15px; margin-bottom:15px;">
+                        <div>
+                            <label style="font-size:12px; font-weight:bold;">Pilih Kelas:</label>
+                            <select id="prak-kelas" onchange="window.updateDatalistPrakSiswa()" style="width:100%; padding:10px; border:1px solid #bdc3c7; border-radius:6px; margin-top:5px;"></select>
+                        </div>
+                        <div>
+                            <label style="font-size:12px; font-weight:bold;">Ketua Kelompok (Ketik & Pilih):</label>
+                            <input type="text" id="prak-ketua" list="list-nama-siswa-prak" placeholder="Nama Ketua..." style="width:100%; padding:10px; border:1px solid #bdc3c7; border-radius:6px; margin-top:5px; box-sizing:border-box;">
+                            <datalist id="list-nama-siswa-prak"></datalist>
+                        </div>
+                    </div>
+
+                    <label style="font-size:12px; font-weight:bold;">Anggota Kelompok (Kosongkan jika tidak ada):</label>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:5px; margin-bottom:25px;">
+                        <input type="text" id="prak-ang1" list="list-nama-siswa-prak" placeholder="Anggota 1" style="padding:10px; border:1px solid #bdc3c7; border-radius:6px; width:100%; box-sizing:border-box;">
+                        <input type="text" id="prak-ang2" list="list-nama-siswa-prak" placeholder="Anggota 2" style="padding:10px; border:1px solid #bdc3c7; border-radius:6px; width:100%; box-sizing:border-box;">
+                        <input type="text" id="prak-ang3" list="list-nama-siswa-prak" placeholder="Anggota 3" style="padding:10px; border:1px solid #bdc3c7; border-radius:6px; width:100%; box-sizing:border-box;">
+                    </div>
+
+                    <h4 style="color:#0b3954; border-bottom:2px solid #ecf0f1; padding-bottom:5px;">B. Isi Laporan</h4>
+                    <label style="font-weight:bold; font-size:13px; color:#34495e;">BAB I: Pendahuluan (Latar Belakang & Tujuan)</label>
+                    <textarea id="prak-bab1" rows="4" style="width:100%; padding:10px; margin-top:5px; margin-bottom:15px; border:1px solid #bdc3c7; border-radius:6px; font-family:inherit; box-sizing:border-box;"></textarea>
+                    
+                    <label style="font-weight:bold; font-size:13px; color:#34495e;">BAB II: Dasar Teori</label>
+                    <textarea id="prak-bab2" rows="4" style="width:100%; padding:10px; margin-top:5px; margin-bottom:15px; border:1px solid #bdc3c7; border-radius:6px; font-family:inherit; box-sizing:border-box;"></textarea>
+                    
+                    <label style="font-weight:bold; font-size:13px; color:#34495e;">BAB III: Metodologi (Alat, Bahan & Cara Kerja)</label>
+                    <textarea id="prak-bab3" rows="5" style="width:100%; padding:10px; margin-top:5px; margin-bottom:15px; border:1px solid #bdc3c7; border-radius:6px; font-family:inherit; box-sizing:border-box;"></textarea>
+                    
+                    <label style="font-weight:bold; font-size:13px; color:#34495e;">BAB IV: Hasil Pengamatan & Pembahasan</label>
+                    <textarea id="prak-bab4" rows="6" style="width:100%; padding:10px; margin-top:5px; margin-bottom:15px; border:1px solid #bdc3c7; border-radius:6px; font-family:inherit; box-sizing:border-box;"></textarea>
+                    
+                    <label style="font-weight:bold; font-size:13px; color:#34495e;">BAB V: Kesimpulan</label>
+                    <textarea id="prak-kesimpulan" rows="3" style="width:100%; padding:10px; margin-top:5px; margin-bottom:25px; border:1px solid #bdc3c7; border-radius:6px; font-family:inherit; box-sizing:border-box;"></textarea>
+
+                    <h4 style="color:#0b3954; border-bottom:2px solid #ecf0f1; padding-bottom:5px; display:flex; justify-content:space-between;">
+                        <span>C. Daftar Pustaka</span>
+                        <button type="button" onclick="window.tambahBarisPustaka()" style="background:#2980b9; color:#fff; border:none; border-radius:4px; padding:2px 10px; font-size:12px; cursor:pointer;">+ Tambah Referensi</button>
+                    </h4>
+                    <table style="width:100%; border-collapse:collapse; margin-bottom:25px;" id="tabel-pustaka-prak">
+                        <thead>
+                            <tr style="background:#ecf0f1; font-size:12px; color:#2c3e50;">
+                                <th style="padding:8px; border:1px solid #bdc3c7;">Penulis</th>
+                                <th style="padding:8px; border:1px solid #bdc3c7; width:80px;">Tahun</th>
+                                <th style="padding:8px; border:1px solid #bdc3c7;">Judul Buku / Artikel</th>
+                                <th style="padding:8px; border:1px solid #bdc3c7; width:40px;">Hapus</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-pustaka">
+                            <tr>
+                                <td style="padding:4px; border:1px solid #bdc3c7;"><input type="text" class="pus-penulis" style="width:100%; box-sizing:border-box; border:none; outline:none; padding:4px;"></td>
+                                <td style="padding:4px; border:1px solid #bdc3c7;"><input type="text" class="pus-tahun" style="width:100%; box-sizing:border-box; border:none; outline:none; padding:4px; text-align:center;"></td>
+                                <td style="padding:4px; border:1px solid #bdc3c7;"><input type="text" class="pus-judul" style="width:100%; box-sizing:border-box; border:none; outline:none; padding:4px;"></td>
+                                <td style="padding:4px; border:1px solid #bdc3c7; text-align:center;">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h4 style="color:#0b3954; border-bottom:2px solid #ecf0f1; padding-bottom:5px;">D. Lampiran Foto</h4>
+                    <input type="file" id="prak-lampiran" accept="image/*" style="width:100%; padding:10px; background:#ecf0f1; border-radius:6px; margin-bottom:10px; box-sizing:border-box;">
+                    
+                    <p id="prak-status" style="font-size:14px; font-weight:bold; margin:20px 0; text-align:center;"></p>
+
+                    <button id="btn-kumpul-prak" onclick="window.kirimLaporanPraktikum(event)" style="width:100%; background:#27ae60; color:#fff; padding:15px; border:none; border-radius:8px; font-weight:bold; font-size:16px; cursor:pointer; box-shadow:0 4px 10px rgba(39, 174, 96, 0.3);">🚀 Kumpulkan & Download PDF</button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', htmlModalPrak);
+})();
+
+// 2. Fungsi Pendukung UI (Datalist & Daftar Pustaka)
+window.bukaModalPraktikum = function() {
+    document.getElementById('modal-praktikum').style.display = 'flex';
+    
+    if (sessionStorage.getItem("statusGuru") === "aktif" && sessionStorage.getItem("previewMode") !== "true") {
+        document.getElementById('view-praktikum-siswa').style.display = 'none';
+        document.getElementById('view-praktikum-guru').style.display = 'block';
+        if (window.muatDaftarLaporan) window.muatDaftarLaporan();
+    } else {
+        document.getElementById('view-praktikum-guru').style.display = 'none';
+        document.getElementById('view-praktikum-siswa').style.display = 'block';
+        
+        // Muat opsi kelas ke dropdown siswa
+        var selKls = document.getElementById('prak-kelas');
+        var klsArr = window.ambilDaftarKelasAktif ? window.ambilDaftarKelasAktif() : [];
+        selKls.innerHTML = '<option value="" disabled selected>-- Pilih Kelas --</option>' + 
+                           klsArr.map(function(k){ return '<option value="'+k+'">'+k+'</option>'; }).join('');
+    }
+};
+
+window.updateDatalistPrakSiswa = function() {
+    var kls = document.getElementById('prak-kelas').value;
+    var dl = document.getElementById('list-nama-siswa-prak');
+    dl.innerHTML = '';
+    if (window.dataAbsensiGlobal && window.dataAbsensiGlobal[kls] && window.dataAbsensiGlobal[kls].siswaList) {
+        var opts = window.dataAbsensiGlobal[kls].siswaList.map(function(s) { return '<option value="' + s.nama + '">'; });
+        dl.innerHTML = opts.join('');
+    }
+};
+
+window.tambahBarisPustaka = function() {
+    var tbody = document.getElementById('tbody-pustaka');
+    var tr = document.createElement('tr');
+    tr.innerHTML = 
+        '<td style="padding:4px; border:1px solid #bdc3c7;"><input type="text" class="pus-penulis" style="width:100%; box-sizing:border-box; border:none; outline:none; padding:4px;"></td>' +
+        '<td style="padding:4px; border:1px solid #bdc3c7;"><input type="text" class="pus-tahun" style="width:100%; box-sizing:border-box; border:none; outline:none; padding:4px; text-align:center;"></td>' +
+        '<td style="padding:4px; border:1px solid #bdc3c7;"><input type="text" class="pus-judul" style="width:100%; box-sizing:border-box; border:none; outline:none; padding:4px;"></td>' +
+        '<td style="padding:4px; border:1px solid #bdc3c7; text-align:center;"><button type="button" onclick="this.closest(\'tr\').remove()" style="background:#e74c3c; color:#fff; border:none; border-radius:4px; cursor:pointer;">✕</button></td>';
+    tbody.appendChild(tr);
+};
+
+// 3. Mesin Pembuat PDF (Engine Format KTI Resmi)
+// PDF menggunakan fungsi `window.print()` standar browser, dimanipulasi dengan CSS @page untuk Pagination
+window.cetakPraktikumPDF = function(dataLap) {
+    // Susun Anggota
+    var listAnggota = [];
+    if(dataLap.ang1) listAnggota.push(dataLap.ang1);
+    if(dataLap.ang2) listAnggota.push(dataLap.ang2);
+    if(dataLap.ang3) listAnggota.push(dataLap.ang3);
+    var htmlAnggota = listAnggota.map(function(n) { return '<li>' + n + '</li>'; }).join('');
+
+    // Susun Daftar Pustaka (APA Style)
+    var htmlPustaka = '';
+    if (dataLap.pustaka && dataLap.pustaka.length > 0) {
+        htmlPustaka = dataLap.pustaka.map(function(p) {
+            return '<p style="text-indent:-30px; padding-left:30px; margin:5px 0;">' + 
+                   (p.penulis || 'Anonim') + '. (' + (p.tahun || 'n.d.') + '). <i>' + (p.judul || 'Tanpa Judul') + '</i>.</p>';
+        }).join('');
+    } else {
+        htmlPustaka = '<p>-</p>';
+    }
+
+    // Nama Bulan & Tahun Dinamis
+    var tglDate = new Date();
+    var namaBulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+    var strBulanTahun = namaBulan[tglDate.getMonth()] + " " + tglDate.getFullYear();
+
+    var win = window.open('','','width=1000,height=800');
+    
+    var htmlContent = `
+    <html>
+    <head>
+        <title>Laporan Praktikum - ${dataLap.ketua}</title>
+        <style>
+            @media print {
+                @page { margin: 2.5cm 2cm; }
+                body { 
+                    font-family: "Times New Roman", Times, serif; 
+                    font-size: 12pt; 
+                    line-height: 1.5; 
+                    color: black; 
+                    counter-reset: page; /* Atur ulang nomor halaman */
+                }
+                .page-break { page-break-before: always; }
+                
+                /* Trik untuk Nomor Halaman Standar di Chrome/Safari */
+                #page-footer {
+                    position: fixed;
+                    bottom: 0;
+                    width: 100%;
+                    text-align: center;
+                    font-size: 11pt;
+                }
+                
+                h1, h2, h3 { text-align: center; font-weight: bold; }
+                h1 { font-size: 16pt; margin-bottom: 20px; }
+                h2 { font-size: 14pt; margin-top: 0; }
+                p { text-align: justify; margin-top:5px; margin-bottom:15px; }
+                
+                .cover { 
+                    height: 100vh; 
+                    display: flex; 
+                    flex-direction: column; 
+                    justify-content: center; 
+                    align-items: center; 
+                    text-align: center; 
+                    padding: 0 10%;
+                }
+                .cover-logo { max-width: 150px; height: auto; margin: 40px 0; }
+                .cover-title { text-transform: uppercase; font-size: 16pt; font-weight: bold; margin-bottom: 30px; line-height: 1.5; }
+                .cover-meta { font-size: 14pt; margin: 20px 0; font-weight:bold; }
+                .cover-names { text-align: left; font-size: 14pt; margin-top: 15px; }
+                .cover-names ul { list-style-type: disc; padding-left: 20px; margin-top: 5px; }
+                .cover-bottom { margin-top: auto; padding-bottom: 40px; font-size: 14pt; font-weight: bold; text-transform: uppercase; }
+                
+                .toc { width: 100%; margin-top: 30px; }
+                .toc td { padding: 5px 0; font-size: 12pt; }
+                .toc td:nth-child(2) { border-bottom: 1px dotted #000; width: 100%; }
+                
+                .lampiran-img { max-width: 80%; max-height: 400px; display: block; margin: 20px auto; border: 1px solid #000; }
+            }
+            body { font-family: "Times New Roman", Times, serif; font-size: 12pt; max-width: 800px; margin: 0 auto; padding: 20px; }
+        </style>
+    </head>
+    <body>
+        <!-- HALAMAN 1: COVER -->
+        <div class="cover">
+            <div class="cover-title">
+                LAPORAN PRAKTIKUM<br>
+                ${dataLap.judul}
+            </div>
+            
+            <!-- Logo Sekolah (Dapat diganti URL nya jika ada logo online) -->
+            <img class="cover-logo" src="https://i.ibb.co/L5rCg5N/tutwuri.png" alt="Logo">
+            
+            <div class="cover-meta">
+                Pembimbing: Mahardika Wiryawan, S.Pd
+            </div>
+            
+            <div class="cover-names">
+                <b>Oleh:</b><br>
+                Ketua kelompok : ${dataLap.ketua}<br>
+                Anggota Kelompok :
+                <ul>
+                    ${htmlAnggota || '<li>-</li>'}
+                </ul>
+            </div>
+            
+            <div class="cover-bottom">
+                SMA BODHI DHARMA<br>
+                BATAM<br>
+                ${strBulanTahun}
+            </div>
+        </div>
+
+        <!-- HALAMAN 2: DAFTAR ISI -->
+        <div class="page-break">
+            <h2>DAFTAR ISI</h2>
+            <table class="toc">
+                <tr><td>COVER</td><td></td></tr>
+                <tr><td>DAFTAR ISI</td><td></td></tr>
+                <tr><td style="white-space:nowrap;">BAB I PENDAHULUAN</td><td></td></tr>
+                <tr><td style="white-space:nowrap;">BAB II DASAR TEORI</td><td></td></tr>
+                <tr><td style="white-space:nowrap;">BAB III METODOLOGI</td><td></td></tr>
+                <tr><td style="white-space:nowrap;">BAB IV HASIL DAN PEMBAHASAN</td><td></td></tr>
+                <tr><td style="white-space:nowrap;">BAB V KESIMPULAN</td><td></td></tr>
+                <tr><td style="white-space:nowrap;">DAFTAR PUSTAKA</td><td></td></tr>
+                <tr><td style="white-space:nowrap;">LAMPIRAN</td><td></td></tr>
+            </table>
+        </div>
+
+        <!-- HALAMAN 3: BAB 1 & 2 (Biasanya bisa digabung jika pendek, tapi kita pisah sesuai rule) -->
+        <div class="page-break">
+            <h2>BAB I<br>PENDAHULUAN</h2>
+            <div style="white-space: pre-wrap; text-indent: 30px;">${dataLap.bab1}</div>
+        </div>
+
+        <div class="page-break">
+            <h2>BAB II<br>DASAR TEORI</h2>
+            <div style="white-space: pre-wrap; text-indent: 30px;">${dataLap.bab2}</div>
+        </div>
+
+        <div class="page-break">
+            <h2>BAB III<br>METODOLOGI</h2>
+            <div style="white-space: pre-wrap; text-indent: 30px;">${dataLap.bab3}</div>
+        </div>
+
+        <div class="page-break">
+            <h2>BAB IV<br>HASIL DAN PEMBAHASAN</h2>
+            <div style="white-space: pre-wrap; text-indent: 30px;">${dataLap.bab4}</div>
+        </div>
+
+        <div class="page-break">
+            <h2>BAB V<br>KESIMPULAN</h2>
+            <div style="white-space: pre-wrap; text-indent: 30px;">${dataLap.kesimpulan}</div>
+        </div>
+
+        <div class="page-break">
+            <h2>DAFTAR PUSTAKA</h2>
+            ${htmlPustaka}
+        </div>
+
+        <div class="page-break">
+            <h2>LAMPIRAN</h2>
+            ${dataLap.lampiran ? '<img src="'+dataLap.lampiran+'" class="lampiran-img">' : '<p style="text-align:center;">Tidak ada lampiran gambar.</p>'}
+        </div>
+
+    </body>
+    </html>`;
+
+    win.document.write(htmlContent);
+    win.document.close();
+    win.focus();
+    
+    setTimeout(function() { 
+        win.print(); 
+        // win.close(); // Dihilangkan sementara agar siswa bisa melihat jika terblokir popup
+    }, 1000);
+};
+
+// 4. Proses Pengiriman Laporan (Siswa)
+window.kirimLaporanPraktikum = async function(event) {
+    var judul = document.getElementById('prak-judul').value.trim();
+    var kelas = document.getElementById('prak-kelas').value;
+    var ketua = document.getElementById('prak-ketua').value.trim();
+    
+    if (!judul || !kelas || !ketua) {
+        return alert("⚠️ Judul, Kelas, dan Nama Ketua Kelompok wajib diisi!");
+    }
+
+    var btn = document.getElementById('btn-kumpul-prak');
+    btn.disabled = true; btn.style.background = "#95a5a6";
+    var statusEl = document.getElementById('prak-status');
+    statusEl.innerHTML = "<span style='color:#f39c12;'>⏳ Menyiapkan dokumen laporan...</span>";
+
+    // Kumpulkan Data Daftar Pustaka
+    var arrPustaka = [];
+    document.querySelectorAll('#tbody-pustaka tr').forEach(function(tr) {
+        var pen = tr.querySelector('.pus-penulis').value.trim();
+        var thn = tr.querySelector('.pus-tahun').value.trim();
+        var jud = tr.querySelector('.pus-judul').value.trim();
+        if (pen || jud) arrPustaka.push({ penulis: pen, tahun: thn, judul: jud });
+    });
+
+    try {
+        var lampiranUrl = "";
+        var fileInput = document.getElementById('prak-lampiran');
+        if (fileInput.files && fileInput.files[0]) {
+            statusEl.innerHTML = "<span style='color:#f39c12;'>☁️ Mengunggah foto lampiran ke Cloud...</span>";
+            var reader = new FileReader();
+            lampiranUrl = await new Promise((resolve) => {
+                reader.onload = async function(e) {
+                    var url = await window.uploadKeImgBB(e.target.result);
+                    resolve(url);
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+            });
+        }
+
+        var payload = {
+            judul: judul,
+            kelas: kelas,
+            nama: ketua, // Alias nama untuk dashboard guru
+            ketua: ketua,
+            ang1: document.getElementById('prak-ang1').value.trim(),
+            ang2: document.getElementById('prak-ang2').value.trim(),
+            ang3: document.getElementById('prak-ang3').value.trim(),
+            bab1: document.getElementById('prak-bab1').value.trim(),
+            bab2: document.getElementById('prak-bab2').value.trim(),
+            bab3: document.getElementById('prak-bab3').value.trim(),
+            bab4: document.getElementById('prak-bab4').value.trim(),
+            kesimpulan: document.getElementById('prak-kesimpulan').value.trim(),
+            pustaka: arrPustaka,
+            lampiran: lampiranUrl,
+            waktu: new Date().toLocaleString('id-ID')
+        };
+
+        statusEl.innerHTML = "<span style='color:#f39c12;'>💾 Mengirim ke meja guru...</span>";
+        var idLaporan = Date.now() + "_" + ketua.replace(/[^a-zA-Z0-9]/g, '');
+        var dbRestUrl = window.getRestDBUrl("laporan_praktikum/" + idLaporan);
+        
+        await fetch(dbRestUrl, { method: 'PUT', body: JSON.stringify(payload) });
+
+        statusEl.innerHTML = "<span style='color:#2ecc71;'>✅ Laporan berhasil dikumpulkan! Mengunduh PDF...</span>";
+        
+        // Picu pembuatan & download PDF untuk siswa
+        window.cetakPraktikumPDF(payload);
+
+        setTimeout(function() {
+            document.getElementById('modal-praktikum').style.display = 'none';
+            statusEl.innerText = "";
+            btn.disabled = false; btn.style.background = "#27ae60";
+            // Bersihkan form
+            ['prak-judul','prak-ketua','prak-ang1','prak-ang2','prak-ang3','prak-bab1','prak-bab2','prak-bab3','prak-bab4','prak-kesimpulan','prak-lampiran'].forEach(id => {
+                var el = document.getElementById(id); if(el) el.value='';
+            });
+        }, 3000);
+
+    } catch (err) {
+        statusEl.innerHTML = "<span style='color:#e74c3c;'>❌ Gagal mengirim: " + err.message + "</span>";
+        btn.disabled = false; btn.style.background = "#27ae60";
+    }
+};
+
+// 5. Integrasi Cetak PDF di Tampilan Guru
+window.bukaLaporanSiswa = function() {
+    var key = document.getElementById('select-laporan-siswa').value;
+    var wadah = document.getElementById('tempat-laporan-guru');
+    if (!key) { wadah.innerHTML = '<i>Pilih siswa untuk melihat laporan.</i>'; return; }
+
+    var lap = window.dataLaporanTemp[key];
+    
+    // Simpan objek utuh di elemen tersembunyi agar bisa dicetak ulang oleh Guru
+    var jsonLap = JSON.stringify(lap).replace(/'/g, "&#39;");
+    
+    var tombolCetak = '<div style="text-align:right; margin-bottom:15px; padding-bottom:15px; border-bottom:2px dashed #ecf0f1;">' +
+        '<button type="button" onclick="window.cetakPraktikumPDF(JSON.parse(\'' + jsonLap + '\'))" style="background:#e74c3c; color:#fff; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; cursor:pointer; box-shadow:0 4px 10px rgba(231,76,60,0.3);">🖨️ Download Ulang PDF (Format Ilmiah)</button>' +
+    '</div>';
+
+    wadah.innerHTML = tombolCetak + 
+        '<div style="text-align:center;">' +
+            '<h2 style="margin:0; text-transform:uppercase; color:#2c3e50;">' + lap.judul + '</h2>' +
+            '<p style="margin:5px 0 0 0; font-size:16px;">Ketua: <b>' + lap.ketua + '</b> (Kelas ' + lap.kelas + ')</p>' +
+            '<small style="color:#7f8c8d;">Dikumpulkan: ' + lap.waktu + '</small>' +
+        '</div>' +
+        '<div style="margin-top:20px; padding:15px; background:#fef9e7; border-radius:8px; color:#b7950b;">' +
+            '<b>💡 Catatan Guru:</b> Klik tombol merah di atas untuk melihat, mengevaluasi, atau mencetak laporan ini dalam format asli (Cover, Daftar Isi, Bab, dll) seperti yang diunduh oleh siswa.' +
+        '</div>';
+};
