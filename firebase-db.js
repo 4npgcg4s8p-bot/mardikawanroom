@@ -4464,3 +4464,68 @@ window.toggleFullScreen = function() {
         sessionStorage.removeItem('autoFS');
     }
 };
+
+// ============================================================================
+// PATCH KEMBALIKAN TOMBOL CETAK PDF DI MENU PRAKTIKUM GURU
+// ============================================================================
+
+window.bukaLaporanSiswa = function() {
+    var key = document.getElementById('select-laporan-siswa').value;
+    var wadah = document.getElementById('tempat-laporan-guru');
+    if (!key) { wadah.innerHTML = '<i>Pilih siswa untuk melihat laporan.</i>'; return; }
+
+    var lap = window.dataLaporanTemp[key];
+    var imgHtml = lap.lampiran ? '<img src="'+lap.lampiran+'" style="max-width:100%; max-height:400px; border-radius:8px; margin-top:15px; box-shadow:0 4px 10px rgba(0,0,0,0.1); cursor:zoom-in;" title="Bukti Praktikum">' : '<i>(Siswa tidak melampirkan foto dokumentasi)</i>';
+    
+    var formatBab = function(judul, isi) { 
+        return '<div style="margin-bottom:20px;"><h4 style="margin:0 0 5px 0; color:#2980b9; border-bottom:1px solid #ecf0f1; padding-bottom:5px;">'+judul+'</h4><div style="background:#fff; padding:15px; border-left:4px solid #3498db; border-radius:0 4px 4px 0; white-space:pre-wrap; box-shadow:0 1px 3px rgba(0,0,0,0.05); font-size:14px;">'+(isi || '-')+'</div></div>'; 
+    };
+
+    var tombolCetak = '<div style="text-align:right; margin-bottom:15px;">' +
+        '<button type="button" onclick="window.cetakPraktikumPDF(\'area-cetak-praktikum\', \'' + lap.nama.replace(/'/g, "\\'") + '\')" style="background:#e74c3c; color:#fff; border:none; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer; box-shadow:0 4px 10px rgba(231,76,60,0.3);">🖨️ Cetak PDF Laporan</button>' +
+    '</div>';
+
+    wadah.innerHTML = tombolCetak + 
+        '<div id="area-cetak-praktikum">' +
+            '<div style="border-bottom:2px dashed #bdc3c7; padding-bottom:15px; margin-bottom:20px; text-align:center;">' +
+                '<h2 style="margin:0; text-transform:uppercase; color:#2c3e50; font-size:20px;">' + lap.judul + '</h2>' +
+                '<p style="margin:5px 0 0 0; font-size:16px;"><b>' + lap.nama + '</b> (Kelas ' + lap.kelas + ')</p>' +
+                '<small style="color:#7f8c8d;">Dikirim pada: ' + lap.waktu + '</small>' +
+            '</div>' +
+            formatBab('BAB I: Pendahuluan', lap.bab1) +
+            formatBab('BAB II: Dasar Teori', lap.bab2) +
+            formatBab('BAB III: Alat, Bahan & Cara Kerja', lap.bab3) +
+            formatBab('BAB IV: Hasil Pengamatan & Pembahasan', lap.bab4) +
+            formatBab('BAB V: Kesimpulan', lap.kesimpulan) +
+            '<div style="margin-bottom:15px;"><h4 style="margin:0 0 5px 0; color:#2980b9;">📸 Lampiran Dokumentasi</h4>' + imgHtml + '</div>' +
+        '</div>';
+};
+
+window.cetakPraktikumPDF = function(areaId, namaSiswa) {
+    var c = document.getElementById(areaId); 
+    if(!c) return; 
+    var clone = c.cloneNode(true);
+    var win = window.open('','','width=900,height=700');
+    
+    win.document.write('<html><head><title>Laporan Praktikum - ' + namaSiswa + '</title>' +
+        '<style>' +
+        '@media print { ' +
+            'body, p, div, span, h2, h4 { font-family:"Times New Roman", Times, serif !important; color:black !important; } ' +
+            'body { padding:20px; line-height:1.5; } ' +
+            'h2 { text-align:center; margin-bottom:10px; } ' +
+            'h4 { border-bottom:1px solid #000; padding-bottom:5px; margin-top:20px; } ' +
+            'img { max-width:100%; height:auto; display:block; margin:15px auto; } ' +
+            'div[style*="background:#fff"] { border-left: none !important; padding: 0 !important; box-shadow: none !important; }' +
+        '} ' +
+        '</style>' +
+        '</head><body>' + clone.innerHTML + '</body></html>');
+    
+    win.document.close(); 
+    win.focus(); 
+    
+    // Memberikan jeda agar gambar lampiran sempat termuat sebelum jendela print ditarik
+    setTimeout(function(){ 
+        win.print(); 
+        win.close(); 
+    }, 800);
+};
