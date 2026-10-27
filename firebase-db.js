@@ -4965,3 +4965,308 @@ window.bukaLaporanSiswa = function() {
             '<b>💡 Catatan Guru:</b> Klik tombol merah di atas untuk melihat, mengevaluasi, atau mencetak laporan ini dalam format asli (Cover, Daftar Isi, Bab, dll) seperti yang diunduh oleh siswa.' +
         '</div>';
 };
+
+// ============================================================================
+// PATCH PERBAIKAN: UPLOAD IMGBB 400 BAD REQUEST, NOTIFIKASI SIMPAN, & UPGRADE AI
+// ============================================================================
+
+// 1. PERBAIKAN UPLOAD CLOUD IMGBB (Mencegah Error 400 Bad Request)
+window.uploadKeImgBB = async function(fileOrBase64) {
+    var apiKey = "d2b70b55ec70f443b7e4529f79b69152";
+    var formData = new FormData();
+
+    // Jika berupa objek File (seperti lampiran foto praktikum), kirim langsung agar 100% aman
+    if (fileOrBase64 instanceof File || fileOrBase64 instanceof Blob) {
+        formData.append("image", fileOrBase64);
+    } else {
+        // Jika terpaksa base64, hilangkan spasi dan enter yang membuat API ImgBB menolak (Error 400)
+        var b64str = fileOrBase64.includes(',') ? fileOrBase64.split(',')[1] : fileOrBase64;
+        b64str = b64str.replace(/\s+/g, '');
+        formData.append("image", b64str);
+    }
+
+    var res = await fetch("https://api.imgbb.com/1/upload?key=" + apiKey, {
+        method: "POST",
+        body: formData
+    });
+    var data = await res.json();
+    if (!data.success) throw new Error(data.error ? data.error.message : "Cloud server gagal merespon.");
+    return data.data.url;
+};
+
+// Ubah cara Pengirim Laporan Praktikum memanggil ImgBB (menggunakan File murni)
+window.kirimLaporanPraktikum = async function(event) {
+    var judul = document.getElementById('prak-judul').value.trim();
+    var kelas = document.getElementById('prak-kelas').value;
+    var ketua = document.getElementById('prak-ketua').value.trim();
+    
+    if (!judul || !kelas || !ketua) {
+        return alert("⚠️ Judul, Kelas, dan Nama Ketua Kelompok wajib diisi!");
+    }
+
+    var btn = document.getElementById('btn-kumpul-prak');
+    btn.disabled = true; btn.style.background = "#95a5a6";
+    var statusEl = document.getElementById('prak-status');
+    statusEl.innerHTML = "<span style='color:#f39c12;'>⏳ Menyiapkan dokumen laporan...</span>";
+
+    var arrPustaka = [];
+    document.querySelectorAll('#tbody-pustaka tr').forEach(function(tr) {
+        var pen = tr.querySelector('.pus-penulis').value.trim();
+        var thn = tr.querySelector('.pus-tahun').value.trim();
+        var jud = tr.querySelector('.pus-judul').value.trim();
+        if (pen || jud) arrPustaka.push({ penulis: pen, tahun: thn, judul: jud });
+    });
+
+    try {
+        var lampiranUrl = "";
+        var fileInput = document.getElementById('prak-lampiran');
+        if (fileInput.files && fileInput.files[0]) {
+            statusEl.innerHTML = "<span style='color:#f39c12;'>☁️ Mengunggah foto lampiran ke Cloud...</span>";
+            // KUNCI PERBAIKAN: Kirim file aslinya, BUKAN teks Base64
+            lampiranUrl = await window.uploadKeImgBB(fileInput.files[0]);
+        }
+
+        var payload = {
+            judul: judul, kelas: kelas, nama: ketua, ketua: ketua,
+            ang1: document.getElementById('prak-ang1').value.trim(),
+            ang2: document.getElementById('prak-ang2').value.trim(),
+            ang3: document.getElementById('prak-ang3').value.trim(),
+            bab1: document.getElementById('prak-bab1').value.trim(),
+            bab2: document.getElementById('prak-bab2').value.trim(),
+            bab3: document.getElementById('prak-bab3').value.trim(),
+            bab4: document.getElementById('prak-bab4').value.trim(),
+            kesimpulan: document.getElementById('prak-kesimpulan').value.trim(),
+            pustaka: arrPustaka, lampiran: lampiranUrl,
+            waktu: new Date().toLocaleString('id-ID')
+        };
+
+        statusEl.innerHTML = "<span style='color:#f39c12;'>💾 Mengirim ke meja guru...</span>";
+        var idLaporan = Date.now() + "_" + ketua.replace(/[^a-zA-Z0-9]/g, '');
+        var dbRestUrl = window.getRestDBUrl("laporan_praktikum/" + idLaporan);
+        
+        await fetch(dbRestUrl, { method: 'PUT', body: JSON.stringify(payload) });
+
+        statusEl.innerHTML = "<span style='color:#2ecc71;'>✅ Laporan berhasil dikumpulkan! Mengunduh PDF...</span>";
+        window.cetakPraktikumPDF(payload);
+
+        setTimeout(function() {
+            document.getElementById('modal-praktikum').style.display = 'none';
+            statusEl.innerText = "";
+            btn.disabled = false; btn.style.background = "#27ae60";
+            ['prak-judul','prak-ketua','prak-ang1','prak-ang2','prak-ang3','prak-bab1','prak-bab2','prak-bab3','prak-bab4','prak-kesimpulan','prak-lampiran'].forEach(id => {
+                var el = document.getElementById(id); if(el) el.value='';
+            });
+        }, 3000);
+
+    } catch (err) {
+        statusEl.innerHTML = "<span style='color:#e74c3c;'>❌ Gagal mengirim: " + err.message + "</span>";
+        btn.disabled = false; btn.style.background = "#27ae60";
+    }
+};
+
+// 2. PERBAIKAN NOTIFIKASI SIMPAN DI MANAJER LATIHAN (TOMBOL)
+setInterval(function() {
+    var semuaTombol = document.querySelectorAll('button');
+    semuaTombol.forEach(function(btn) {
+        var teksBtn = btn.innerText || '';
+        if ((teksBtn.indexOf('Simpan / Tambahkan') !== -1 || teksBtn.indexOf('Simpan Soal') !== -1) && !btn.dataset.mesinAktifV6) {
+            var modalRoot = window.cariModalManajerSoal(btn);
+            var semuaSelect = modalRoot ? modalRoot.querySelectorAll('select') : [];
+            var selBank = semuaSelect.length >= 3 ? semuaSelect[semuaSelect.length - 1] : null;
+            var pathDb = window.deteksiPathBankSoal(modalRoot, btn, selBank);
+
+            var cloneBtn = btn.cloneNode(true);
+            cloneBtn.removeAttribute('onclick');
+            cloneBtn.dataset.mesinAktifV6 = 'true';
+            btn.parentNode.replaceChild(cloneBtn, btn);
+
+            if (selBank && !selBank.dataset.listenerBankV6) {
+                selBank.dataset.listenerBankV6 = 'true';
+                selBank.removeAttribute('onchange');
+                selBank.addEventListener('change', function() {
+                    window.tampilkanRincianPaketMardi(modalRoot, pathDb, this.value);
+                });
+                window.segarkanUIBankSoalMardi(modalRoot, pathDb, selBank.value);
+            }
+
+            cloneBtn.onclick = async function(e) {
+                e.preventDefault(); e.stopPropagation();
+                var mRoot = window.cariModalManajerSoal(cloneBtn);
+                var selects = mRoot.querySelectorAll('select');
+                var inputs = mRoot.querySelectorAll('input[type="text"]');
+                var textarea = mRoot.querySelector('textarea');
+
+                if (!textarea || !textarea.value.trim()) return window.tampilkanToastFullscreen("⚠️ Kotak teks soal masih kosong!");
+                
+                var kelas = selects[0] ? (selects[0].value || selects[0].options[selects[0].selectedIndex].text) : 'Umum';
+                var mapel = selects[1] ? (selects[1].value || selects[1].options[selects[1].selectedIndex].text) : 'Umum';
+                var judulBab = inputs[0] ? inputs[0].value.trim() : '';
+
+                if (!judulBab) return window.tampilkanToastFullscreen("⚠️ Mohon isi Nama Bab / Paket terlebih dahulu!");
+
+                var teksAsli = cloneBtn.innerText;
+                cloneBtn.innerText = '⏳ Menyimpan...';
+                cloneBtn.disabled = true;
+
+                try {
+                    var arrSoalBaru = window.uraiTeksSoalMardi(textarea.value);
+                    if (arrSoalBaru.length === 0) throw new Error('Format tidak terbaca. Pastikan soal diawali "Soal:"');
+
+                    var idPaket = (kelas + '_' + mapel + '_' + judulBab).replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+                    var urlDb = window.getRestDBUrl(pathDb + '/' + idPaket);
+                    var res = await fetch(urlDb);
+                    var dataLama = (res.ok ? await res.json() : {}) || {};
+                    var listLama = dataLama.soal || dataLama.daftar_soal || dataLama.butir_soal || [];
+                    if (!Array.isArray(listLama)) listLama = Object.values(listLama);
+
+                    var arrayGabungan = listLama.concat(arrSoalBaru);
+                    var pg = 0, isian = 0, essay = 0;
+                    arrayGabungan.forEach(function(q) {
+                        var t = (q.tipe || 'PG').toUpperCase();
+                        if (t === 'IS') isian++; else if (t === 'ESSAY') essay++; else pg++;
+                    });
+
+                    var namaPaketLengkap = kelas + ' - ' + mapel + ' - ' + judulBab;
+                    var payload = {
+                        id: idPaket, nama: namaPaketLengkap, nama_paket: namaPaketLengkap, judul: judulBab, bab: judulBab,
+                        kelas: kelas, jenjang: kelas, mapel: mapel, tipe: pathDb,
+                        soal: arrayGabungan, daftar_soal: arrayGabungan, butir_soal: arrayGabungan, questions: arrayGabungan,
+                        total_soal: arrayGabungan.length, jml_pg: pg, jml_is: isian, jml_essay: essay,
+                        terakhir_diupdate: new Date().toLocaleString()
+                    };
+
+                    var resPut = await fetch(urlDb, { method: 'PUT', body: JSON.stringify(payload) });
+                    if (!resPut.ok) throw new Error('Gagal menyimpan ke server Firebase.');
+
+                    textarea.value = '';
+                    
+                    // KUNCI PERBAIKAN: Berikan Notifikasi Toast dan Indikator Status Simpan
+                    window.tampilkanToastFullscreen("✅ " + arrSoalBaru.length + " Soal berhasil disimpan ke bank data!");
+                    var sb = document.getElementById('save-status-bar');
+                    if (sb) {
+                        sb.innerHTML = "<span style='color:#2ecc71;'>✓ Paket Tersimpan</span>";
+                        setTimeout(function(){ sb.innerHTML = "Cloud Sync: Ready"; }, 3000);
+                    }
+
+                    await window.segarkanUIBankSoalMardi(mRoot, pathDb, idPaket);
+                } catch (err) {
+                    window.tampilkanToastFullscreen("❌ Gagal: " + err.message);
+                }
+                cloneBtn.innerText = teksAsli;
+                cloneBtn.disabled = false;
+            };
+        }
+    });
+}, 1000);
+
+// 3. UPGRADE AI: KEMBALIKAN KECERDASAN MODEL (Tanpa Pemotongan Berlebih)
+window.requestKeGeminiDenganFallback = async function(teksPrompt) {
+    var apiKey = window.ambilKunciAPIAman();
+    // Kembalikan ke model cerdas (Gemini 2.0 Flash) sebagai prioritas utama
+    var bestModels = [
+        "models/gemini-2.0-flash",
+        "models/gemini-2.0-flash-lite",
+        "models/gemini-1.5-flash"
+    ];
+
+    var bodyPayload = JSON.stringify({
+        contents: [{ parts: [{ text: teksPrompt }] }],
+        generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 8192 // Kembalikan batas token maksimal agar penjelasan tidak terpotong
+        }
+    });
+
+    for (var i = 0; i < bestModels.length; i++) {
+        var controller = new AbortController();
+        // Beri waktu lebih lama agar AI bisa berpikir (15 detik)
+        var timeoutId = setTimeout(function() { controller.abort(); }, 15000); 
+        try {
+            var url = 'https://generativelanguage.googleapis.com/v1beta/' + bestModels[i] + ':generateContent?key=' + apiKey;
+            var response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: bodyPayload,
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            var data = await response.json();
+            if (response.ok && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
+                return data.candidates[0].content.parts[0].text;
+            }
+        } catch (err) {
+            clearTimeout(timeoutId);
+        }
+    }
+    throw new Error("Server AI sedang memproses antrean, silakan coba lagi.");
+};
+
+// Mengembalikan kecerdasan membaca PDF secara utuh
+window.prosesUploadPDFSoal = async function(inputEl) {
+    var file = inputEl.files && inputEl.files[0];
+    if (!file) return;
+
+    var targetId = window.targetTextareaPDF || 'lat-input-raw';
+    var textArea = document.getElementById(targetId) || document.getElementById('lat-input-raw');
+    var jumlahInput = prompt("Masukkan jumlah soal yang ingin diekstrak (Maksimal 25 soal):", "10");
+    if (!jumlahInput) { inputEl.value = ''; return; }
+    var jumlahSoal = Math.min(Math.max(1, parseInt(jumlahInput) || 10), 25);
+
+    var teksLama = textArea ? textArea.value : "";
+    if (textArea) textArea.value = "🤖 AI (Gemini 2.0) sedang menganalisis dokumen secara mendalam...\nMohon tunggu sekitar 5-10 detik...";
+
+    try {
+        var pdfjsLib = await window.muatLibraryPDFJS();
+        var arrayBuffer = await file.arrayBuffer();
+        var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        var teksPDF = "";
+        
+        // Membaca hingga 15 halaman penuh agar konteks materi terbawa
+        var maxPages = Math.min(pdf.numPages, 15);
+        for (var i = 1; i <= maxPages; i++) {
+            var page = await pdf.getPage(i);
+            var content = await page.getTextContent();
+            teksPDF += content.items.map(function(item) { return item.str; }).join(" ") + "\n";
+        }
+
+        if (!teksPDF || teksPDF.length < 10) throw new Error("PDF berupa gambar scan tanpa teks.");
+
+        var ekstrakInstan = window.konversiTeksPDFKeFormatSoalLokal(teksPDF, jumlahSoal);
+        if (ekstrakInstan && ekstrakInstan.split("Soal:").length - 1 >= Math.min(3, jumlahSoal)) {
+            if (textArea) textArea.value = teksLama ? (teksLama.trim() + "\n\n" + ekstrakInstan) : ekstrakInstan;
+            window.tampilkanToastFullscreen("⚡ " + jumlahSoal + " soal berhasil diekstrak secara instan!");
+            inputEl.value = '';
+            return;
+        }
+
+        // Memperlebar batas baca AI menjadi 25.000 karakter agar penjelasan soal logis
+        var potonganRingkas = teksPDF.substring(0, 25000); 
+        var promptCerdas = "Anda adalah guru ahli. Buatlah " + jumlahSoal + " soal Pilihan Ganda berkualitas tinggi dan menantang (HOTS) berdasarkan teks materi berikut. Hasilkan format persis seperti ini (tanpa markdown atau intro):\nSoal: [Pertanyaan]\nTipe: PG\nA. [Opsi A]\nB. [Opsi B]\nC. [Opsi C]\nD. [Opsi D]\nKunci: A\nPembahasan: [Penjelasan mendalam dan logis]\n\nTeks Materi:\n" + potonganRingkas;
+
+        var hasilAI = await window.requestKeGeminiDenganFallback(promptCerdas);
+        hasilAI = hasilAI.replace(/```/g, '').trim();
+        if (textArea) textArea.value = teksLama ? (teksLama.trim() + "\n\n" + hasilAI) : hasilAI;
+        window.tampilkanToastFullscreen("✅ AI selesai menyusun soal dengan pembahasan lengkap!");
+    } catch (err) {
+        if (textArea) textArea.value = teksLama;
+        window.tampilkanToastFullscreen("❌ " + err.message);
+    }
+    inputEl.value = '';
+};
+
+// Mengembalikan kecerdasan AI Tutor
+window.panggilGeminiAPI = async function(pesan, loadingId, topikAsli) {
+    var body = document.getElementById('ai-tutor-body');
+    var el = document.getElementById(loadingId);
+    try {
+        var promptTutor = "Kamu adalah 'Mahardika AI', asisten guru yang ramah, interaktif, dan cerdas. Jelaskan pertanyaan ini kepada siswa dengan bahasa yang mudah dipahami, gunakan analogi jika perlu, dan berikan contoh nyata: " + pesan;
+        var balasanAI = await window.requestKeGeminiDenganFallback(promptTutor);
+        if (el) el.innerHTML = balasanAI.replace(/\n/g, '<br>');
+    } catch (err) {
+        var topik = topikAsli || "konsep ini";
+        if (el) {
+            el.innerHTML = '<b>💡 Penjelasan Singkat:</b><br>Terkait <b>' + topik + '</b>, pastikan kamu memahami mekanisme dasarnya terlebih dahulu. <br><small style="color:#7f8c8d;"><i>(AI sedang antre, silakan kirim ulang pesanmu).</i></small>';
+        }
+    }
+    body.scrollTop = body.scrollHeight;
+};
