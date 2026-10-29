@@ -437,29 +437,29 @@ window.aktifkanGeneratorKuisAI = function() {
                 let qM = x.split(/(A\.|Tipe:|Kunci:)/i)[0].trim();
                 let aM = x.match(/A\.(.*?)(?=B\.)/is)?.[1].trim();
                 let bM = x.match(/B\.(.*?)(?=C\.)/is)?.[1].trim();
-                let cM = x.match(/C\.(.*?)(?=D\.)/is)?.[1].trim();
-                let dM = x.match(/D\.(.*?)(?=Kunci:|Pembahasan:|$)/is)?.[1].trim();
-                let kM = x.match(/Kunci:\s*([A-D])/i);
+                let cM = x.match(/C\.(.*?)(?=D\.|E\.|Kunci:|Pembahasan:|$)/is)?.[1].trim();
+                let dM = x.match(/D\.(.*?)(?=E\.|Kunci:|Pembahasan:|$)/is)?.[1].trim();
+                let eM = x.match(/E\.(.*?)(?=Kunci:|Pembahasan:|$)/is)?.[1].trim();
+                let kM = x.match(/Kunci:\s*([A-E])/i);
                 let pM = x.match(/Pembahasan:\s*(.*)/is);
-                if (qM && aM && bM && cM && dM && kM) {
+                
+                if (qM && aM && bM && cM && kM) {
+                    let opsiRakit = [aM, bM, cM];
+                    if (dM) opsiRakit.push(dM);
+                    if (eM) opsiRakit.push(eM);
+                    
+                    let idxKunci = kM[1].toUpperCase().charCodeAt(0) - 65;
+                    idxKunci = Math.max(0, Math.min(opsiRakit.length - 1, idxKunci));
+
                     ext.push({
                         type: 'mc',
                         question: qM,
-                        options: [aM, bM, cM, dM],
-                        correctIndex: (kM[1].toUpperCase().charCodeAt(0) - 65),
-                        explanation: pM ? pM[1].trim() : "Jawaban benar: " + kM[1]
+                        options: opsiRakit,
+                        correctIndex: idxKunci,
+                        explanation: pM ? pM[1].trim() : "Jawaban benar: " + kM[1].toUpperCase()
                     });
                 }
             });
-            if (ext.length > 0 && activeQuizBlockIdx > -1 && window.contentBlocksData[activeQuizBlockIdx]) {
-                window.contentBlocksData[activeQuizBlockIdx].questions = ext.slice(0, jumlahSoal);
-                delete window.quizState[activeQuizBlockIdx];
-                window.renderBlocks();
-                if (typeof window.simpanKeDB === 'function') window.simpanKeDB();
-                window.tutupModal('modal-ai-quiz');
-                document.getElementById('save-status-bar').innerHTML = "<span style='color:#2ecc71;'>✓ Soal Berhasil Diekstrak!</span>";
-                return;
-            }
         }
 
         window.tutupModal('modal-ai-quiz');
@@ -739,7 +739,7 @@ window.aktifkanGeneratorKuisAI = function() {
         document.getElementById('save-status-bar').innerHTML = "<span style='color:#e67e22;'>🤖 AI Sedang Menyusun Kuis...</span>";
 
         try {
-            var promptAI = 'Buatlah ' + jumlahSoal + ' soal pilihan ganda berdasarkan materi berikut:\n"' + teksMateri + '"\n\nKeluarkan hasilnya HANYA dalam format array JSON murni yang valid seperti ini, tanpa markdown:\n[\n  {\n    "type": "mc",\n    "question": "Pertanyaan...",\n    "options": ["Opsi A", "Opsi B", "Opsi C", "Opsi D"],\n    "correctIndex": 0,\n    "explanation": "Penjelasan singkat."\n  }\n]';
+            var promptAI = 'Buatlah ' + jumlahSoal + ' soal pilihan ganda berdasarkan materi berikut:\n"' + teksMateri + '"\n\nKeluarkan hasilnya HANYA dalam format array JSON murni. Jumlah opsi sesuaikan tingkat materi (A-C, A-D, atau A-E). Contoh struktur:\n[\n  {\n    "type": "mc",\n    "question": "Pertanyaan...",\n    "options": ["Opsi A", "Opsi B", "Opsi C", "Opsi D", "Opsi E"],\n    "correctIndex": 0,\n    "explanation": "Penjelasan."\n  }\n]';
 
             var balasanAI = await window.requestKeGeminiDenganFallback(promptAI);
             balasanAI = balasanAI.replace(/```json/gi, '').replace(/```/gi, '').trim();
@@ -792,155 +792,6 @@ document.addEventListener('contextmenu', function(e) {
         e.preventDefault();
     }
 });
-
-// ==========================================
-// 1. FITUR BACA PDF KE DALAM SLIDE MATERI
-// ==========================================
-window.prosesUploadPDFMateri = async function(inputEl) {
-    var file = inputEl.files[0];
-    if (!file) return;
-    
-    document.getElementById('save-status-bar').innerHTML = "<span style='color:#e67e22;'>⏳ Mengonversi PDF menjadi Slide Interaktif...</span>";
-    
-    try {
-        var pdfjsLib = await window.muatLibraryPDFJS();
-        var arrayBuffer = await file.arrayBuffer();
-        var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        var pagesArr = [];
-        
-        var maxPages = Math.min(pdf.numPages, 15);
-        for (var i = 1; i <= maxPages; i++) {
-            var page = await pdf.getPage(i);
-            var viewport = page.getViewport({ scale: 1.5 });
-            var canvas = document.createElement('canvas');
-            canvas.width = viewport.width; canvas.height = viewport.height;
-            var ctx = canvas.getContext('2d');
-            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-            pagesArr.push(canvas.toDataURL('image/jpeg', 0.8));
-        }
-        
-        if (!window.contentBlocksData) window.contentBlocksData = [];
-        window.contentBlocksData.push({ 
-            type: 'pdf', pages: pagesArr, bg: '#f4f6f7', width: 'XL', padTop: '20px', padBot: '30px', drawing: '' 
-        });
-        
-        window.renderBlocks();
-        window.simpanKeDB();
-        document.getElementById('save-status-bar').innerHTML = "<span style='color:#2ecc71;'>✓ Slide PDF Berhasil Dibuat!</span>";
-    } catch(e) {
-        alert("Gagal memuat PDF. Error: " + e.message);
-        document.getElementById('save-status-bar').innerHTML = "Cloud Sync: Ready";
-    }
-    inputEl.value = '';
-};
-
-// ==========================================
-// 2. FITUR FOKUS FULLSCREEN CONTENT BLOCK
-// ==========================================
-window.toggleBlockFullscreen = function(btnEl, index) {
-    var wrapper = document.querySelector('.block-wrapper[data-index="' + index + '"]');
-    if (!wrapper) return;
-    
-    if (wrapper.classList.contains('block-fullscreen-active')) {
-        wrapper.classList.remove('block-fullscreen-active');
-        btnEl.innerHTML = "🔲 Fokus";
-        document.body.style.overflow = "auto";
-    } else {
-        wrapper.classList.add('block-fullscreen-active');
-        btnEl.innerHTML = "✖️ Keluar Fokus";
-        document.body.style.overflow = "hidden";
-        wrapper.scrollTop = 0; 
-    }
-    setTimeout(inisialisasiSemuaCanvas, 300);
-};
-
-// ==========================================
-// 3. FITUR UNDO / REDO MENU DRAW
-// ==========================================
-window.drawUndoStack = {};
-window.drawRedoStack = {};
-window.lastActiveCanvas = null;
-
-window.simpanHistoriUndo = function(cvs) {
-    if (!cvs) return;
-    window.lastActiveCanvas = cvs;
-    var id = cvs.getAttribute('data-index') || ('fb' + cvs.getAttribute('data-fb-index'));
-    
-    if (!window.drawUndoStack[id]) window.drawUndoStack[id] = [];
-    var ctx = cvs.getContext('2d');
-    window.drawUndoStack[id].push(ctx.getImageData(0, 0, cvs.width, cvs.height));
-    window.drawRedoStack[id] = []; 
-};
-
-window.undoDraw = function() {
-    if (!window.lastActiveCanvas) return alert("Coret sesuatu terlebih dahulu!");
-    var id = window.lastActiveCanvas.getAttribute('data-index') || ('fb' + window.lastActiveCanvas.getAttribute('data-fb-index'));
-    var hist = window.drawUndoStack[id];
-    
-    if (hist && hist.length > 0) {
-        var ctx = window.lastActiveCanvas.getContext('2d');
-        if (!window.drawRedoStack[id]) window.drawRedoStack[id] = [];
-        window.drawRedoStack[id].push(ctx.getImageData(0, 0, window.lastActiveCanvas.width, window.lastActiveCanvas.height));
-        
-        var previousState = hist.pop();
-        ctx.putImageData(previousState, 0, 0);
-        window.simpanKeDBTriggerCustom(window.lastActiveCanvas);
-    }
-};
-
-window.redoDraw = function() {
-    if (!window.lastActiveCanvas) return;
-    var id = window.lastActiveCanvas.getAttribute('data-index') || ('fb' + window.lastActiveCanvas.getAttribute('data-fb-index'));
-    var histRedo = window.drawRedoStack[id];
-    
-    if (histRedo && histRedo.length > 0) {
-        var ctx = window.lastActiveCanvas.getContext('2d');
-        window.drawUndoStack[id].push(ctx.getImageData(0, 0, window.lastActiveCanvas.width, window.lastActiveCanvas.height));
-        
-        var nextState = histRedo.pop();
-        ctx.putImageData(nextState, 0, 0);
-        window.simpanKeDBTriggerCustom(window.lastActiveCanvas);
-    }
-};
-
-window.simpanKeDBTriggerCustom = function(cvs) {
-    var fbIdx = cvs.getAttribute('data-fb-index');
-    var blockIdx = cvs.getAttribute('data-index');
-    var dataToSave = cvs.toDataURL("image/png");
-    
-    if (fbIdx !== null && window.floatingBoxesData[fbIdx]) window.floatingBoxesData[fbIdx].drawing = dataToSave;
-    else if (window.contentBlocksData[blockIdx]) window.contentBlocksData[blockIdx].drawing = dataToSave;
-    
-    if (typeof window.simpanKeDB === 'function') {
-        document.getElementById('save-status-bar').innerHTML = "<span style='color:#e67e22;'>✍️ Saving Undo/Redo...</span>";
-        window.simpanKeDB();
-    }
-};
-
-// ==========================================
-// 4. PERSISTENSI FULLSCREEN SAAT PINDAH ROOM
-// ==========================================
-window.toggleFullScreen = function() {
-    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        var elem = document.documentElement;
-        if (elem.requestFullscreen) elem.requestFullscreen();
-        else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
-        sessionStorage.setItem('autoFS', 'true');
-    } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-        sessionStorage.removeItem('autoFS');
-    }
-};
-
-document.addEventListener('click', function autoFSInit() {
-    if (sessionStorage.getItem('autoFS') === 'true' && !document.fullscreenElement) {
-        var elem = document.documentElement;
-        if (elem.requestFullscreen) elem.requestFullscreen().catch(function(){});
-        else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen().catch(function(){});
-    }
-    document.removeEventListener('click', autoFSInit);
-}, { once: true });
 
 // ============================================================================
 // MASTER PATCH MAIN.JS: SLIDE PDF MATERI, FOKUS FULLSCREEN BLOCK & UNDO/REDO DRAW
@@ -1579,11 +1430,13 @@ window.pastikanStrukturAbsensiKelas = function(kls) {
 window.renderTabelAbsensiKelas = function() {
     var wadah = document.getElementById('wadah-tabel-absensi');
     if (!wadah) return;
-    var kls = window.kelasAbsensiAktif || window.ambilDaftarKelasAktif()[0];
+    
+    var kls = window.kelasAbsensiAktif || window.kelasAdminUtama || window.ambilDaftarKelasAktif()[0];
     var dataKls = window.pastikanStrukturAbsensiKelas(kls);
-    var tglList = dataKls.tanggalList;
-    var siswaList = dataKls.siswaList;
+    var tglList = dataKls.tanggalList || [];
+    var siswaList = dataKls.siswaList || [];
 
+    // 1. Membuat Header Tabel (Judul Pertemuan)
     var headerTglHtml = tglList.map(function(tgl, tIdx) {
         return '<th style="text-align:center; min-width:75px;">' +
             '<div contenteditable="true" onblur="window.ubahJudulTanggalAbsensi(' + tIdx + ', this.innerText)" style="outline:none; border-bottom:1px dashed rgba(255,255,255,0.4); padding-bottom:2px;">' + tgl + '</div>' +
@@ -1591,6 +1444,7 @@ window.renderTabelAbsensiKelas = function() {
         '</th>';
     }).join('');
 
+    // 2. Membuat Baris Data Siswa
     var rowsHtml = '';
     if (siswaList.length === 0) {
         rowsHtml = '<tr><td colspan="' + (tglList.length + 7) + '" style="text-align:center; padding:25px; color:#94a3b8;">Belum ada daftar siswa di kelas <b>' + kls + '</b>. Klik tombol <b>👤 + Tambah Siswa</b> di kanan atas.</td></tr>';
@@ -1598,6 +1452,8 @@ window.renderTabelAbsensiKelas = function() {
         rowsHtml = siswaList.map(function(s, sIdx) {
             var hadir = 0, sakit = 0, izin = 0, alfa = 0;
             var kehadiranMap = s.kehadiran || {};
+            
+            // INI ADALAH BAGIAN KOTAK PERTEMUAN YANG SEMPAT HILANG
             var cellsHtml = tglList.map(function(tgl, tIdx) {
                 var st = kehadiranMap[tIdx] || '-';
                 if (st === 'H') hadir++;
@@ -1610,17 +1466,31 @@ window.renderTabelAbsensiKelas = function() {
 
             return '<tr>' +
                 '<td style="text-align:center; width:40px;">' + (sIdx + 1) + '</td>' +
-                '<td contenteditable="true" onblur="window.ubahNamaSiswaAbsensi(' + sIdx + ', this.innerText)" style="font-weight:600; min-width:180px;">' + s.nama + '</td>' +
+                
+                // KOLOM NAMA & TOMBOL CATATAN
+                '<td style="padding:0; min-width:220px;">' +
+                    '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; height:100%;">' +
+                        '<span contenteditable="true" onblur="window.ubahNamaSiswaAbsensi(' + sIdx + ', this.innerText)" style="font-weight:600; flex:1; outline:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + s.nama + '</span>' +
+                        '<button type="button" onclick="window.bukaCatatanSiswa(' + sIdx + ')" title="Catatan Khusus Siswa" style="background:#fff9c4; border:1px solid #f1c40f; color:#d35400; padding:3px 8px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:bold; transition:0.2s; box-shadow:0 2px 5px rgba(0,0,0,0.05); margin-left:10px;">📝 Catatan</button>' +
+                    '</div>' +
+                '</td>' +
+                
+                // DERETAN KOTAK PERTEMUAN (H/S/I/A)
                 cellsHtml +
+                
+                // REKAP TOTAL 
                 '<td style="text-align:center; font-weight:bold; color:#155724; background:#f0fdf4;">' + hadir + '</td>' +
                 '<td style="text-align:center; font-weight:bold; color:#856404; background:#fefce8;">' + sakit + '</td>' +
                 '<td style="text-align:center; font-weight:bold; color:#004085; background:#eff6ff;">' + izin + '</td>' +
                 '<td style="text-align:center; font-weight:bold; color:#721c24; background:#fef2f2;">' + alfa + '</td>' +
-                '<td style="text-align:center;"><button type="button" onclick="window.hapusSiswaAbsensi(' + sIdx + ')" style="background:none;border:none;cursor:pointer;">🗑️</button></td>' +
+                
+                // TOMBOL HAPUS SISWA
+                '<td style="text-align:center;"><button type="button" onclick="window.hapusSiswaAbsensi(' + sIdx + ')" style="background:none;border:none;cursor:pointer;" title="Hapus Siswa">🗑️</button></td>' +
             '</tr>';
         }).join('');
     }
 
+    // 3. Merakit dan Menampilkan Tabel Penuh
     wadah.innerHTML =
         '<table class="excel-table" id="tabel-excel-absensi">' +
             '<thead>' +
@@ -1628,10 +1498,10 @@ window.renderTabelAbsensiKelas = function() {
                     '<th style="text-align:center; width:40px;">No</th>' +
                     '<th>Nama Siswa</th>' +
                     headerTglHtml +
-                    '<th style="text-align:center; background:#16a085;">H</th>' +
-                    '<th style="text-align:center; background:#d35400;">S</th>' +
-                    '<th style="text-align:center; background:#2980b9;">I</th>' +
-                    '<th style="text-align:center; background:#c0392b;">A</th>' +
+                    '<th style="text-align:center; background:#16a085; width:40px;">H</th>' +
+                    '<th style="text-align:center; background:#d35400; width:40px;">S</th>' +
+                    '<th style="text-align:center; background:#2980b9; width:40px;">I</th>' +
+                    '<th style="text-align:center; background:#c0392b; width:40px;">A</th>' +
                     '<th style="text-align:center; width:50px;">Aksi</th>' +
                 '</tr>' +
             '</thead>' +
@@ -2250,7 +2120,7 @@ window.prosesUploadPDFSoal = async function(inputEl) {
         }
 
         var potonganRingkas = teksPDF.substring(0, 6500);
-        var promptCepat = "Buat " + jumlahSoal + " soal PG singkat dari teks ini. Format wajib tanpa markdown:\nSoal: ...\nTipe: PG\nA. ...\nB. ...\nC. ...\nD. ...\nKunci: A\nPembahasan: ...\n\nTeks:\n" + potonganRingkas;
+        var promptCepat = "Buat " + jumlahSoal + " soal PG singkat dari teks ini. Sesuaikan jumlah opsi A-D atau A-E mengikuti teks aslinya (minimal A-C). Format wajib tanpa markdown:\nSoal: ...\nTipe: PG\nA. ...\nB. ...\nC. ...\n(D dan E opsional jika ada)\nKunci: A\nPembahasan: ...\n\nTeks:\n" + potonganRingkas;
 
         var hasilAI = await window.requestKeGeminiDenganFallback(promptCepat);
         hasilAI = hasilAI.replace(/```/g, '').trim();
@@ -3549,20 +3419,45 @@ window.verifikasiMasukUjian = async function() {
     }, 3000);
 };
 
-// Modifikasi Deteksi Pelanggaran -> Kirim Data tanpa Koneksi Database Terbuka (REST API PUT)
+// ============================================================================
+// 1. SENSOR PELANGGARAN UJIAN (ANTI-ROTASI & ANTI-KEYBOARD VIRTUAL HP)
+// ============================================================================
 window.pantauPelanggaranUjian = function(e) {
-    if (!window.isStrictUjianActive) return;
+    // Jika ujian tidak aktif, atau siswa sedang dalam proses konfirmasi kumpul (Pop-up), matikan sensor!
+    if (!window.isStrictUjianActive || window.isSubmittingExam) return; 
     if (document.body.classList.contains('mode-edit-aktif') || document.documentElement.classList.contains('force-edit-mode')) return;
-    let isViolation = false;
 
+    let isViolation = false;
     if (e.type === 'resize') {
-        if(window.visualViewport && window.visualViewport.scale !== 1) { window.initialWinW = window.innerWidth; window.initialWinH = window.innerHeight; return; }
-        let wDiff = Math.abs(window.innerWidth - window.initialWinW); let hDiff = Math.abs(window.innerHeight - window.initialWinH);
-        let isRotation = (Math.abs(window.innerWidth - window.initialWinH) < 150) && (Math.abs(window.innerHeight - window.initialWinW) < 150);
-        let isKeyboard = wDiff < 30 && hDiff > 100;
-        if (isRotation || isKeyboard) { window.initialWinW = window.innerWidth; window.initialWinH = window.innerHeight; return; }
-        if (wDiff > 50 || hDiff > (window.initialWinH * 0.3)) { isViolation = true; }
-    } else if (document.hidden || document.visibilityState==='hidden' || e.type==='blur') {
+        if(window.visualViewport && window.visualViewport.scale !== 1) { 
+            window.initialWinW = window.innerWidth; window.initialWinH = window.innerHeight; return; 
+        }
+        
+        let wDiff = Math.abs(window.innerWidth - window.initialWinW); 
+        let hDiff = Math.abs(window.innerHeight - window.initialWinH);
+        
+        // KUNCI 1: Deteksi Rotasi Layar (Perubahan dari Portrait ke Landscape)
+        let isLandscape = window.innerWidth > window.innerHeight;
+        let wasLandscape = window.initialWinW > window.initialWinH;
+        
+        // Jika orientasi berubah, itu BUKAN split screen, abaikan pelanggaran!
+        if (isLandscape !== wasLandscape) {
+            window.initialWinW = window.innerWidth; window.initialWinH = window.innerHeight; 
+            return;
+        }
+        
+        // KUNCI 2: Deteksi Keyboard Virtual HP Muncul (Tinggi menyusut drastis, lebar tetap)
+        let isKeyboard = wDiff < 50 && hDiff > 100;
+        if (isKeyboard) { 
+            window.initialWinW = window.innerWidth; window.initialWinH = window.innerHeight; 
+            return; 
+        }
+        
+        // Split screen murni (dimensi berubah drastis tanpa rotasi)
+        if (wDiff > 100 || hDiff > (window.initialWinH * 0.35)) { 
+            isViolation = true; 
+        }
+    } else if (e.type === 'blur' || document.hidden || document.visibilityState === 'hidden') {
         isViolation = true;
     }
 
@@ -3573,14 +3468,13 @@ window.pantauPelanggaranUjian = function(e) {
         let sName = window.latihanState.namaSiswa, uName = window.latihanState.namaUjian;
 
         if(window.violationCount >= 5) {
-            // KIRIM REST API (Tidak membutuhkan koneksi WebSocket yang aktif)
             fetch(window.getRestDBUrl(`live_monitor/${uName}/${sName}`), { method: 'PUT', body: JSON.stringify({ vc: window.violationCount, time: Date.now(), status: 'Diskualifikasi (Kumpul Otomatis)' }) });
+            window.isSubmittingExam = true; // Matikan sensor sebelum alert muncul agar tidak looping
             alert("🚨 PELANGGARAN KE-5 TERDETEKSI! Ujian dihentikan dan jawaban otomatis terkirim tanpa kompromi.");
             window.kumpulkanUjianStrict(true);
             return;
         }
 
-        // KIRIM REST API
         fetch(window.getRestDBUrl(`live_monitor/${uName}/${sName}`), { method: 'PUT', body: JSON.stringify({ vc: window.violationCount, time: Date.now(), status: 'Sedang Dihukum' }) });
 
         let s = 600; if(window.violationCount >= 2) s = 1800;
@@ -3589,18 +3483,33 @@ window.pantauPelanggaranUjian = function(e) {
     }
 };
 
-// Modifikasi Pengumpulan Ujian -> Kirim Hasil tanpa Koneksi Database Terbuka (REST API POST/PUT)
+// ============================================================================
+// 2. KUMPULKAN UJIAN (MENCEGAH ERROR PELANGGARAN SAAT KLIK TOMBOL SELESAI)
+// ============================================================================
 window.kumpulkanUjianStrict = function(isForceSubmit = false) {
     let s = window.latihanState;
+    
+    // KUNCI UTAMA: Aktifkan bendera ini SEBELUM memunculkan kotak Confirm/Alert
+    window.isSubmittingExam = true; 
+
     if (!isForceSubmit && s.answered.size < s.total) {
-        if (!confirm(`Baru dijawab ${s.answered.size}/${s.total}. Yakin kumpulkan?`)) return;
+        // Kotak confirm ini akan mencuri fokus, tapi karena isSubmittingExam sudah true, sensor tidak akan menjatuhkan hukuman
+        if (!confirm(`Baru dijawab ${s.answered.size}/${s.total}. Yakin kumpulkan?`)) {
+            // Jika batal kumpul, hidupkan lagi sensornya setelah jeda 1 detik agar aman
+            setTimeout(() => { window.isSubmittingExam = false; }, 1000);
+            return;
+        }
     }
 
+    // Cabut seluruh sensor ujian dari browser
+    window.isStrictUjianActive = false; 
+    document.removeEventListener("visibilitychange", window.pantauPelanggaranUjian); 
+    window.removeEventListener("blur", window.pantauPelanggaranUjian); 
+    window.removeEventListener("resize", window.pantauPelanggaranUjian);
+    if (window.onbeforeunload) window.onbeforeunload = null;
+
     let sb = document.getElementById('save-status-bar');
-    if (sb) {
-        sb.style.display = 'block';
-        sb.innerHTML = "<span style='color:#e67e22;'>Merekap Jawaban...</span>";
-    }
+    if (sb) { sb.style.display = 'block'; sb.innerHTML = "<span style='color:#e67e22;'>Merekap Jawaban...</span>"; }
 
     let cor = 0; let rincian = [];
     for (let i = 0; i < s.total; i++) {
@@ -3618,22 +3527,23 @@ window.kumpulkanUjianStrict = function(isForceSubmit = false) {
     localStorage.setItem('gamma_exam_submitted_' + s.namaUjian + '_' + s.namaSiswa, 'true');
     localStorage.removeItem('gamma_exam_state');
 
-    // SIAPKAN PAYLOAD UNTUK DIKIRIM (REST API)
     let statusTeks = isForceSubmit ? `Selesai (Otomatis) | Nilai: ${score}` : `Selesai (Aman) | Nilai: ${score}`;
     let payloadHasil = { nama: s.namaSiswa, nilai: score, benar: cor, total: s.total, jawaban: rincian, timestamp: Date.now() };
 
-    // KIRIM REST API (Jalur HTTP Bebas Hambatan)
-    fetch(window.getRestDBUrl(`live_monitor/${s.namaUjian}/${s.namaSiswa}`), { method: 'PUT', body: JSON.stringify({ vc: window.violationCount, status: statusTeks, time: Date.now() }) });
-    fetch(window.getRestDBUrl(`hasil_ujian/${s.namaUjian}/${Date.now()}_${Math.random().toString(36).substr(2,4)}`), { method: 'PUT', body: JSON.stringify(payloadHasil) });
+    if(typeof window.getRestDBUrl === 'function'){
+        fetch(window.getRestDBUrl(`live_monitor/${s.namaUjian}/${s.namaSiswa}`), { method: 'PUT', body: JSON.stringify({ vc: window.violationCount, status: statusTeks, time: Date.now() }) });
+        fetch(window.getRestDBUrl(`hasil_ujian/${s.namaUjian}/${Date.now()}_${Math.random().toString(36).substr(2,4)}`), { method: 'PUT', body: JSON.stringify(payloadHasil) });
+    }
 
     if (sb) sb.innerHTML = "<span style='color:#2ecc71;'>✓ Berhasil Dikumpulkan!</span>";
-
-    window.isStrictUjianActive = false; document.body.classList.remove('strict-mode-active');
+    document.body.classList.remove('strict-mode-active');
     if (window.ujianTimerInterval) clearInterval(window.ujianTimerInterval);
     document.getElementById('ujian-timer-fixed').style.display = 'none';
-    document.removeEventListener("visibilitychange", window.pantauPelanggaranUjian); window.removeEventListener("blur", window.pantauPelanggaranUjian); window.removeEventListener("resize", window.pantauPelanggaranUjian); window.onbeforeunload = null;
-    if (window.hukumanTimer) clearInterval(window.hukumanTimer); document.getElementById('strict-warning-overlay').style.display = 'none';
-    let submitBtn = document.querySelector('#ujian-strict-container .btn-submit-ujian'); if (submitBtn) submitBtn.style.display = 'none';
+    
+    if (window.hukumanTimer) clearInterval(window.hukumanTimer); 
+    document.getElementById('strict-warning-overlay').style.display = 'none';
+    let submitBtn = document.querySelector('#ujian-strict-container .btn-submit-ujian'); 
+    if (submitBtn) submitBtn.style.display = 'none';
 
     if (isForceSubmit) {
         document.getElementById('ujian-strict-subtitle').innerText = "Ujian Telah Selesai. Anda tidak dapat melihat review/pembahasan.";
@@ -3642,7 +3552,8 @@ window.kumpulkanUjianStrict = function(isForceSubmit = false) {
     } else {
         document.getElementById('ujian-strict-subtitle').innerText = "Mode Review: Ujian telah dikumpulkan.";
         document.getElementById('btn-close-strict').style.display = 'block';
-        window.tampilkanToastFullscreen("✅ Ujian berhasil dikumpulkan!");
+        if (window.tampilkanToastFullscreen) window.tampilkanToastFullscreen("✅ Ujian berhasil dikumpulkan!");
+        else alert("✅ Ujian berhasil dikumpulkan!");
     }
     
     document.getElementById('quiz-result-score').innerText = score; document.getElementById('quiz-result-correct').innerText = cor; document.getElementById('quiz-result-total').innerText = s.total;
@@ -4206,3 +4117,221 @@ var intervalPrak = setInterval(function() {
     }, 1500);
 })();
 
+// ============================================================================
+// NEW UPDATE PATCH: AUTO-SAVE PRAKTIKUM, PRINT PDF GURU & ANTI-DUPLIKASI INTERVAL
+// ============================================================================
+
+// 1. Membersihkan Interval Ganda Akibat Duplikasi Script
+if (window.intervalPrakActive) clearInterval(window.intervalPrak);
+window.intervalPrakActive = true;
+
+// 2. Fitur Auto-Save Draft Laporan Praktikum (Local Storage)
+window.initAutoSavePraktikum = function() {
+    const fields = ['prak-judul', 'prak-nama', 'prak-kelas', 'prak-bab1', 'prak-bab2', 'prak-bab3', 'prak-bab4', 'prak-kesimpulan'];
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            // Pulihkan data jika ada
+            const savedData = localStorage.getItem('draft_' + id);
+            if (savedData) el.value = savedData;
+            // Simpan saat mengetik
+            el.addEventListener('input', () => {
+                localStorage.setItem('draft_' + id, el.value);
+            });
+        }
+    });
+};
+
+window.bukaModalPraktikum = function() {
+    document.getElementById('modal-praktikum').style.display = 'block';
+    
+    // Jika Mahardika (atau guru lain) sedang login
+    if (sessionStorage.getItem("statusGuru") === "aktif") {
+        document.getElementById('view-praktikum-siswa').style.display = 'none';
+        document.getElementById('view-praktikum-guru').style.display = 'block';
+        window.muatDaftarLaporan();
+    } else {
+        // Jika murid yang membuka
+        document.getElementById('view-praktikum-guru').style.display = 'none';
+        document.getElementById('view-praktikum-siswa').style.display = 'block';
+        
+        // Memicu Auto-Save untuk siswa
+        setTimeout(window.initAutoSavePraktikum, 300); 
+    }
+};
+
+// Modifikasi Pengumpulan Praktikum untuk menghapus Draft
+const origKirimLaporanPraktikum = window.kirimLaporanPraktikum;
+window.kirimLaporanPraktikum = async function(event) {
+    await origKirimLaporanPraktikum(event);
+    const statusEl = document.getElementById('prak-status');
+    if (statusEl && statusEl.innerText.includes('berhasil')) {
+        const fields = ['prak-judul', 'prak-nama', 'prak-kelas', 'prak-bab1', 'prak-bab2', 'prak-bab3', 'prak-bab4', 'prak-kesimpulan'];
+        fields.forEach(id => localStorage.removeItem('draft_' + id));
+    }
+};
+
+// 3. Tambahan Tombol Cetak PDF Laporan di Dashboard Guru
+const origBukaLaporanSiswa = window.bukaLaporanSiswa;
+window.bukaLaporanSiswa = function() {
+    if (typeof origBukaLaporanSiswa === 'function') origBukaLaporanSiswa();
+    const wadah = document.getElementById('tempat-laporan-guru');
+    const key = document.getElementById('select-laporan-siswa').value;
+    
+    if (key && !document.getElementById('btn-print-laporan')) {
+        const btnPrint = document.createElement('button');
+        btnPrint.id = 'btn-print-laporan';
+        btnPrint.innerHTML = '🖨️ Cetak PDF Laporan';
+        btnPrint.style.cssText = 'background:#2c3e50; color:#fff; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold; float:right; margin-bottom:15px;';
+        btnPrint.onclick = function() {
+            const clone = wadah.cloneNode(true);
+            const hapusBtn = clone.querySelector('#btn-print-laporan');
+            if (hapusBtn) hapusBtn.remove();
+            
+            const win = window.open('', '', 'width=900,height=700');
+            win.document.write(`
+                <html><head><title>Cetak Laporan Praktikum</title>
+                <style>
+                    body { font-family: 'Times New Roman', serif; padding: 30px; line-height: 1.5; color: #000; }
+                    h2 { border-bottom: 2px solid #000; padding-bottom: 10px; text-align: center; }
+                    h4 { margin-bottom: 5px; color: #000; }
+                    div { margin-bottom: 15px; }
+                    img { max-width: 100%; max-height: 400px; display: block; margin: 10px auto; }
+                    .content-box { border-left: 3px solid #000; padding-left: 15px; margin-bottom: 20px; white-space: pre-wrap; }
+                </style>
+                </head><body>${clone.innerHTML.replace(/border-left:4px solid #3498db;/g, 'border-left:3px solid #000;')}</body></html>
+            `);
+            win.document.close();
+            win.focus();
+            setTimeout(() => { win.print(); win.close(); }, 500);
+        };
+        wadah.insertBefore(btnPrint, wadah.firstChild);
+    }
+};
+
+
+// ============================================================================
+// MODUL CATATAN SISWA (STYLE GOOGLE KEEP) DI TABEL ABSENSI - REVISI FINAL
+// ============================================================================
+window.activeSiswaCatatanIdx = -1;
+
+window.bukaCatatanSiswa = function(sIdx) {
+    window.activeSiswaCatatanIdx = sIdx;
+    var kls = window.kelasAbsensiAktif || window.kelasAdminUtama;
+    var dataKls = window.pastikanStrukturAbsensiKelas(kls);
+    var siswa = dataKls.siswaList[sIdx];
+
+    var m = document.getElementById('modal-catatan-siswa');
+    if (!m) {
+        var html = `
+        <div id="modal-catatan-siswa" class="mahardika-modal-wrap" style="display:flex; z-index: 2147483647 !important; background:rgba(0,0,0,0.6);">
+            <div class="mahardika-modal-card modal-box" style="max-width:420px; background:#fffdf1; border-radius:12px; overflow:hidden; border:2px solid #f1c40f; box-shadow:0 15px 40px rgba(0,0,0,0.2); pointer-events:auto;">
+                <div style="padding:15px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f8e48f; background:#fff9c4;">
+                    <h3 style="margin:0; font-size:16px; color:#d35400;">📝 Catatan: <span id="judul-catatan-siswa" style="color:#2c3e50;"></span></h3>
+                    <button type="button" onclick="document.getElementById('modal-catatan-siswa').style.display='none'" style="background:none; border:none; font-size:20px; font-weight:bold; cursor:pointer; color:#e74c3c;">✕</button>
+                </div>
+                <div style="padding:20px; flex:1; overflow-y:auto; min-height:220px; max-height:55vh;" id="body-catatan-siswa"></div>
+                <div style="padding:15px; border-top:1px solid #f8e48f; background:#fff;">
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="input-catatan-baru" placeholder="Tulis catatan atau list baru..." style="flex:1; padding:10px; border:1px solid #f1c40f; border-radius:8px; outline:none; font-family:'Quicksand', sans-serif; font-size:13px; font-weight:600;">
+                        <button type="button" onclick="window.tambahCatatanSiswa()" style="background:#f39c12; color:#fff; border:none; padding:10px 15px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px; box-shadow:0 2px 6px rgba(243, 156, 18, 0.3);">+ Tambah</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+        
+        document.body.insertAdjacentHTML('beforeend', html);
+        m = document.getElementById('modal-catatan-siswa');
+        
+        // Tekan Enter untuk mengirim catatan
+        document.getElementById('input-catatan-baru').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                window.tambahCatatanSiswa();
+            }
+        });
+    } else {
+        m.style.display = 'flex';
+    }
+
+    document.getElementById('judul-catatan-siswa').innerText = siswa.nama;
+    window.renderCatatanSiswa();
+    setTimeout(function() { document.getElementById('input-catatan-baru').focus(); }, 150);
+};
+
+window.renderCatatanSiswa = function() {
+    var kls = window.kelasAbsensiAktif || window.kelasAdminUtama;
+    var dataKls = window.pastikanStrukturAbsensiKelas(kls);
+    var sIdx = window.activeSiswaCatatanIdx;
+    var siswa = dataKls.siswaList[sIdx];
+    var container = document.getElementById('body-catatan-siswa');
+    
+    if (!siswa.catatan || siswa.catatan.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#95a5a6; font-style:italic; padding:30px 10px; font-size:13px;">Belum ada catatan.<br>Ketik di bawah untuk menambahkan list.</div>';
+        return;
+    }
+
+    var html = siswa.catatan.map(function(cat, cIdx) {
+        var isDone = cat.done ? 'text-decoration:line-through; color:#95a5a6;' : 'color:#2c3e50;';
+        var checkIcon = cat.done ? '✅' : '⬜';
+        var bgCard = cat.done ? '#f8f9fa' : '#ffffff';
+        
+        return `
+        <div style="background:${bgCard}; padding:10px 15px; border-radius:8px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 3px 10px rgba(0,0,0,0.06); border:1px solid #fcf3cf; border-left:5px solid #f1c40f; transition:0.2s;">
+            <div style="display:flex; align-items:center; gap:10px; flex:1; cursor:pointer;" onclick="window.toggleCatatanSiswa(${cIdx})" title="Klik untuk menandai selesai">
+                <span style="font-size:14px;">${checkIcon}</span>
+                <span style="font-size:13px; font-weight:600; flex:1; ${isDone} word-break:break-word;">${cat.text}</span>
+            </div>
+            <button type="button" onclick="window.hapusCatatanSiswa(${cIdx})" style="background:none; border:none; color:#e74c3c; cursor:pointer; font-size:14px; padding:5px 8px; margin-left:10px; border-radius:4px;" onmouseover="this.style.background='#fadbd8'" onmouseout="this.style.background='none'" title="Hapus Catatan">🗑️</button>
+        </div>`;
+    }).join('');
+    
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
+};
+
+window.tambahCatatanSiswa = function() {
+    try {
+        var input = document.getElementById('input-catatan-baru');
+        var val = input.value.trim();
+        if (!val) return;
+
+        var kls = window.kelasAbsensiAktif || window.kelasAdminUtama;
+        var dataKls = window.pastikanStrukturAbsensiKelas(kls);
+        var sIdx = window.activeSiswaCatatanIdx;
+        var siswa = dataKls.siswaList[sIdx];
+
+        if (!siswa.catatan) siswa.catatan = [];
+        siswa.catatan.push({ text: val, done: false });
+        
+        input.value = '';
+        if (window.simpanAbsensiKeDB) window.simpanAbsensiKeDB();
+        window.renderCatatanSiswa();
+    } catch (e) {
+        alert("Gagal menambahkan catatan: " + e.message);
+    }
+};
+
+window.hapusCatatanSiswa = function(cIdx) {
+    var kls = window.kelasAbsensiAktif || window.kelasAdminUtama;
+    var dataKls = window.pastikanStrukturAbsensiKelas(kls);
+    var sIdx = window.activeSiswaCatatanIdx;
+    var siswa = dataKls.siswaList[sIdx];
+    
+    if(confirm("Hapus catatan ini secara permanen?")) {
+        siswa.catatan.splice(cIdx, 1);
+        if (window.simpanAbsensiKeDB) window.simpanAbsensiKeDB();
+        window.renderCatatanSiswa();
+    }
+};
+
+window.toggleCatatanSiswa = function(cIdx) {
+    var kls = window.kelasAbsensiAktif || window.kelasAdminUtama;
+    var dataKls = window.pastikanStrukturAbsensiKelas(kls);
+    var sIdx = window.activeSiswaCatatanIdx;
+    var siswa = dataKls.siswaList[sIdx];
+    
+    siswa.catatan[cIdx].done = !siswa.catatan[cIdx].done;
+    if (window.simpanAbsensiKeDB) window.simpanAbsensiKeDB();
+    window.renderCatatanSiswa();
+};

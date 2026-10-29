@@ -1881,21 +1881,6 @@ window.convertLassoToMath = async function() {
         document.getElementById('save-status-bar').innerHTML = "Cloud Sync: Ready";
     }
 };
-// Pengaman fungsi Modal & Pop-up beserta perbaikan posisi tombol X
-window.bukaModal = function(id) { document.getElementById(id).style.display = 'flex'; };
-window.tutupModal = function(id) { document.getElementById(id).style.display = 'none'; };
-
-window.bukaWelcomePopup = function() { 
-    document.getElementById('modal-welcome-popup').style.display = 'flex'; 
-    if(document.body.classList.contains('mode-edit-aktif')) {
-        document.getElementById('popup-img-tool').style.display = 'block';
-    }
-};
-
-window.tutupWelcomePopup = function() { 
-    document.getElementById('modal-welcome-popup').style.display = 'none'; 
-    sessionStorage.setItem('popupDismissed', 'true'); 
-};
 
 // Memastikan tombol X selalu berada di lapisan paling atas agar bisa diklik
 document.querySelectorAll('.popup-welcome-box .close-btn').forEach(function(btn) {
@@ -2122,46 +2107,41 @@ function ekstrakTeksKeArraySoal(rawText) {
     blocks.forEach(function(b) {
         var tipeExplicit = b.match(/Tipe\s*:\s*(PG|IS|Isian|Short\s*Answer|Essay|Uraian)/i);
         var tipeStr = tipeExplicit ? tipeExplicit[1].toUpperCase() : "";
-
         var qMatch = b.split(/(?:\n\s*Tipe\s*:|\n\s*A\.|\n\s*Kunci\s*:|\n\s*Pembahasan\s*:)/i)[0].trim();
+
+        // Pencari Opsi Dinamis (A, B, C Wajib. D dan E Opsional)
         var aM = b.match(/(?:^|\n)\s*A\.\s*(.*?)(?=(?:\n\s*B\.|$))/is);
         var bM = b.match(/(?:^|\n)\s*B\.\s*(.*?)(?=(?:\n\s*C\.|$))/is);
-        var cM = b.match(/(?:^|\n)\s*C\.\s*(.*?)(?=(?:\n\s*D\.|$))/is);
+        var cM = b.match(/(?:^|\n)\s*C\.\s*(.*?)(?=(?:\n\s*D\.|\n\s*E\.|\n\s*Kunci\s*:|\n\s*Pembahasan\s*:|$))/is);
         var dM = b.match(/(?:^|\n)\s*D\.\s*(.*?)(?=(?:\n\s*E\.|\n\s*Kunci\s*:|\n\s*Pembahasan\s*:|$))/is);
+        var eM = b.match(/(?:^|\n)\s*E\.\s*(.*?)(?=(?:\n\s*Kunci\s*:|\n\s*Pembahasan\s*:|$))/is);
+        
         var kM = b.match(/Kunci\s*:\s*([^\n]+)/i);
         var pM = b.match(/Pembahasan\s*:\s*(.*)/is);
 
-        var optA = aM ? aM[1].trim() : null;
-        var optB = bM ? bM[1].trim() : null;
-        var optC = cM ? cM[1].trim() : null;
-        var optD = dM ? dM[1].trim() : null;
         var kunci = kM ? kM[1].trim() : "";
         var pembahasan = pM ? pM[1].trim() : "";
 
-        if (optA && optB && optC && optD && tipeStr !== 'IS' && tipeStr !== 'ESSAY') {
+        if (aM && bM && cM && tipeStr !== 'IS' && tipeStr !== 'ESSAY') {
+            // Merakit Opsi Sesuai Ketersediaan
+            var optionsArr = [aM[1].trim(), bM[1].trim(), cM[1].trim()];
+            if (dM) optionsArr.push(dM[1].trim());
+            if (eM) optionsArr.push(eM[1].trim());
+
             var hurufKunci = (kunci || 'A').toUpperCase().charAt(0);
-            var idxKunci = Math.max(0, Math.min(3, hurufKunci.charCodeAt(0) - 65));
+            var idxKunci = Math.max(0, Math.min(optionsArr.length - 1, hurufKunci.charCodeAt(0) - 65));
+
             hasil.push({
                 type: 'mc',
                 question: qMatch,
-                options: [optA, optB, optC, optD],
+                options: optionsArr,
                 correctIndex: idxKunci,
                 explanation: pembahasan || ("Jawaban benar: " + hurufKunci)
             });
         } else if (tipeStr === 'ESSAY' || tipeStr === 'URAIAN') {
-            hasil.push({
-                type: 'essay',
-                question: qMatch,
-                correctAnswers: kunci ? [kunci] : [],
-                explanation: pembahasan || (kunci ? "Rubrik/Kunci: " + kunci : "Soal Essay / Uraian")
-            });
+            hasil.push({ type: 'essay', question: qMatch, correctAnswers: kunci ? [kunci] : [], explanation: pembahasan || (kunci ? "Rubrik/Kunci: " + kunci : "Soal Essay / Uraian") });
         } else if (qMatch) {
-            hasil.push({
-                type: 'short_answer',
-                question: qMatch,
-                correctAnswers: kunci ? kunci.split('|').map(function(s) { return s.trim(); }) : [""],
-                explanation: pembahasan || ("Kunci Isian: " + kunci)
-            });
+            hasil.push({ type: 'short_answer', question: qMatch, correctAnswers: kunci ? kunci.split('|').map(function(s) { return s.trim(); }) : [""], explanation: pembahasan || ("Kunci Isian: " + kunci) });
         }
     });
     return hasil;
@@ -2229,7 +2209,9 @@ window.bukaManajerLatihanTerpadu = function() {
                                 '<h4 style="margin:0; color:#2c3e50; font-size:14px;">👁️ 2. Daftar Soal pada Paket: <span id="label-paket-latihan-aktif" style="color:#16a085;">(Pilih di bawah)</span></h4>' +
                                 '<div id="rincian-jumlah-latihan" style="font-size:12px; font-weight:bold; color:#2980b9; margin-top:3px;">0 Soal (0 PG, 0 IS, dan 0 Essay)</div>' +
                             '</div>' +
-                            '<button type="button" onclick="window.hapusPaketLatihanTerpilih()" style="background:#e74c3c; color:#fff; border:none; padding:6px 12px; border-radius:5px; font-size:11px; cursor:pointer; font-weight:bold;">🗑️ Hapus Paket Ini</button>' +
+                            '<div style="display:flex; gap:8px;">' +
+                            '<button type="button" onclick="window.cetakPaketTerpilih(\'latihan\')" style="background:#34495e; color:#fff; border:none; padding:6px 12px; border-radius:5px; font-size:11px; cursor:pointer; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.1);">🖨️ Cetak / Word</button>' +
+                            '<button type="button" onclick="window.hapusPaketLatihanTerpilih()" style="background:#e74c3c; color:#fff; border:none; padding:6px 12px; border-radius:5px; font-size:11px; cursor:pointer; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.1);">🗑️ Hapus Paket Ini</button>' +
                         '</div>' +
                         '<div id="ruang-review-soal-latihan" style="max-height:210px; overflow-y:auto; padding:8px; background:#fdfefe; border:1px dashed #bdc3c7; border-radius:6px;">' +
                             '<p style="color:#888; font-size:12px; text-align:center; margin:15px 0;">Pilih salah satu bank soal pada dropdown di bagian paling bawah untuk melihat rincian soal.</p>' +
@@ -2258,34 +2240,53 @@ window.simpanSoalKeBankLatihan = function() {
     var mapel = document.getElementById('lat-input-mapel').value;
     var judul = document.getElementById('lat-input-judul').value.trim();
     var raw = document.getElementById('lat-input-raw').value.trim();
+    var notify = window.tampilkanToastFullscreen || alert;
 
-    if (!judul) return alert("Masukkan Nama Bab / Paket Latihan terlebih dahulu!");
-    if (!raw) return alert("Masukkan teks soal terlebih dahulu!");
+    if (!judul) return notify("⚠️ Masukkan Nama Bab / Paket Latihan terlebih dahulu!");
+    if (!raw) return notify("⚠️ Paste teks soal terlebih dahulu!");
 
-    var soalBaru = ekstrakTeksKeArraySoal(raw);
-    if (soalBaru.length === 0) return alert("Format soal tidak dikenali. Pastikan menggunakan kata 'Soal:' di awal pertanyaan.");
+    var parser = window.ekstrakTeksKeArraySoalGlobal || window.ekstrakTeksKeArraySoal;
+    if (!parser) return notify("❌ Sistem pengekstrak soal belum siap.");
+    
+    var soalBaru = parser(raw);
+    if (!soalBaru || soalBaru.length === 0) return notify("❌ Format soal tidak dikenali. Pastikan menggunakan kata 'Soal:' di awal pertanyaan.");
 
     var keyPaket = judul.indexOf('(') !== -1 ? judul : '(' + jenjang + ' - ' + mapel + ') ' + judul;
-    var existing = window.ambilArraySoal(window.bankLatihanTerpadu[keyPaket]);
+    
+    if (!window.bankLatihanTerpadu) window.bankLatihanTerpadu = {};
+    var existing = window.ambilArraySoal ? window.ambilArraySoal(window.bankLatihanTerpadu[keyPaket]) : [];
     var gabungan = existing.concat(soalBaru);
 
+    // Update state lokal
     window.bankLatihanTerpadu[keyPaket] = { jenjang: jenjang, mapel: mapel, judul: judul, questions: gabungan, updatedAt: Date.now() };
 
-    if (typeof db !== 'undefined') {
-        set(ref(db, 'bank_latihan_terpadu'), window.bankLatihanTerpadu);
-        set(ref(db, 'bank_soal'), window.bankLatihanTerpadu);
+    notify("⏳ Menyimpan soal ke database server...");
+
+    var janjiSimpan = [];
+    if (typeof db !== 'undefined' && typeof set !== 'undefined' && typeof ref !== 'undefined') {
+        janjiSimpan.push(set(ref(db, 'bank_latihan_terpadu/' + keyPaket), window.bankLatihanTerpadu[keyPaket]));
+        janjiSimpan.push(set(ref(db, 'bank_soal/' + keyPaket), window.bankLatihanTerpadu[keyPaket]));
+    } else {
+        janjiSimpan.push(Promise.resolve());
     }
 
-    document.getElementById('lat-input-raw').value = "";
-    window.paketLatihanTerpilih = keyPaket;
+    // Tunggu hingga server Firebase merespons berhasil
+    Promise.all(janjiSimpan).then(function() {
+        document.getElementById('lat-input-raw').value = "";
+        window.paketLatihanTerpilih = keyPaket;
+        
+        // Panggil render real-time
+        if (typeof window.renderDropdownBankLatihanBawah === 'function') window.renderDropdownBankLatihanBawah();
+        var sel = document.getElementById('dropdown-bank-latihan-bawah');
+        if (sel) sel.value = keyPaket;
+        
+        if (typeof window.pilihPaketLatihanDariDropdown === 'function') window.pilihPaketLatihanDariDropdown(keyPaket);
 
-    renderDropdownBankLatihanBawah();
-    var sel = document.getElementById('dropdown-bank-latihan-bawah');
-    if (sel) sel.value = keyPaket;
-    window.pilihPaketLatihanDariDropdown(keyPaket);
-
-    var info = window.hitungRincianSoal(window.bankLatihanTerpadu[keyPaket]);
-    alert('✓ Berhasil menambahkan ' + soalBaru.length + ' soal!\nTotal sekarang: ' + info.teksRingkas);
+        var info = (typeof window.hitungRincianSoal === 'function') ? window.hitungRincianSoal(window.bankLatihanTerpadu[keyPaket]) : {teksRingkas: gabungan.length + " Soal"};
+        notify('✅ Berhasil menyimpan ' + soalBaru.length + ' soal!\nTotal di paket ini: ' + info.teksRingkas);
+    }).catch(function(err) {
+        notify('❌ Gagal menyimpan ke server: ' + err.message);
+    });
 };
 
 function renderDropdownBankLatihanBawah() {
@@ -2447,7 +2448,9 @@ window.bukaManajerUjianTerpadu = function() {
                                 '<h4 style="margin:0; color:#2c3e50; font-size:13px;">👁️ 3. Daftar Soal pada Bank Ujian: <span id="label-paket-ujian-aktif" style="color:#2980b9;">(Pilih di bawah)</span></h4>' +
                                 '<div id="rincian-jumlah-ujian" style="font-size:12px; font-weight:bold; color:#16a085; margin-top:3px;">0 Soal (0 PG, 0 IS, dan 0 Essay)</div>' +
                             '</div>' +
-                            '<button type="button" onclick="window.hapusBankUjianTerpilih()" style="background:#e74c3c; color:#fff; border:none; padding:5px 12px; border-radius:5px; font-size:11px; cursor:pointer; font-weight:bold;">🗑️ Hapus Bank Ujian Ini</button>' +
+                            '<div style="display:flex; gap:8px;">' +
+                            '<button type="button" onclick="window.cetakPaketTerpilih(\'ujian\')" style="background:#34495e; color:#fff; border:none; padding:5px 12px; border-radius:5px; font-size:11px; cursor:pointer; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.1);">🖨️ Cetak / Word</button>' +
+                            '<button type="button" onclick="window.hapusBankUjianTerpilih()" style="background:#e74c3c; color:#fff; border:none; padding:5px 12px; border-radius:5px; font-size:11px; cursor:pointer; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.1);">🗑️ Hapus Bank Ujian Ini</button>' +
                         '</div>' +
                         '<div id="ruang-review-soal-ujian" style="max-height:190px; overflow-y:auto; padding:8px; background:#fdfefe; border:1px dashed #bdc3c7; border-radius:6px;">' +
                             '<p style="color:#888; font-size:12px; text-align:center; margin:12px 0;">Pilih salah satu Bank Ujian pada dropdown paling bawah untuk memeriksa soal dan rincian PG/IS/Essay.</p>' +
@@ -3490,8 +3493,6 @@ window.muatUlangSemuaKanvasGambar = function() {
     });
 };
 
-// Rekam je
-
 // ============================================================================
 // UPGRADE FIREBASE-DB: RUANG ADMINISTRASI (ABSENSI & AGENDA), ANTI-EXIT
 // FULLSCREEN PADA LATIHAN/UJIAN, DAN KEAMANAN DATABASE
@@ -3991,28 +3992,53 @@ window.simpanSoalKeBankUjianTerpadu = function() {
     var mapel = document.getElementById('uji-input-mapel').value;
     var nama = document.getElementById('uji-input-nama').value.trim();
     var raw = document.getElementById('uji-input-raw').value.trim();
+    var notify = window.tampilkanToastFullscreen || alert;
 
-    if (!nama) return alert("Masukkan Nama Ujian terlebih dahulu!");
-    if (!raw) return alert("Paste teks soal ujian terlebih dahulu!");
+    if (!nama) return notify("⚠️ Masukkan Nama Ujian terlebih dahulu!");
+    if (!raw) return notify("⚠️ Paste teks soal ujian terlebih dahulu!");
 
-    var soalBaru = window.ekstrakTeksKeArraySoalGlobal ? window.ekstrakTeksKeArraySoalGlobal(raw) : [];
-    if (soalBaru.length === 0) return alert("Format soal tidak valid. Gunakan kata 'Soal:' di awal pertanyaan.");
+    var parser = window.ekstrakTeksKeArraySoalGlobal || window.ekstrakTeksKeArraySoal;
+    if (!parser) return notify("❌ Sistem pengekstrak soal belum siap.");
+
+    var soalBaru = parser(raw);
+    if (!soalBaru || soalBaru.length === 0) return notify("❌ Format soal tidak valid. Gunakan kata 'Soal:' di awal pertanyaan.");
 
     var namaLengkap = nama.indexOf('(') !== -1 ? nama : '(' + jenjang + ' - ' + mapel + ') ' + nama;
     if (!window.bankUjianGlobal) window.bankUjianGlobal = {};
-    var lama = window.ambilArraySoal(window.bankUjianGlobal[namaLengkap]);
+    
+    var lama = window.ambilArraySoal ? window.ambilArraySoal(window.bankUjianGlobal[namaLengkap]) : [];
     var gabungan = lama.concat(soalBaru);
+    
+    // Update state lokal
     window.bankUjianGlobal[namaLengkap] = gabungan;
 
-    set(ref(db, 'bank_ujian/' + namaLengkap), gabungan);
-    set(ref(db, 'bank_soal_ujian/' + namaLengkap), gabungan);
+    notify("⏳ Menyimpan paket ujian ke database server...");
 
-    document.getElementById('uji-input-raw').value = "";
-    window.paketUjianTerpilih = namaLengkap;
-    window.renderDropdownBankUjianBawah();
-    window.pilihPaketUjianDariDropdown(namaLengkap);
-    var info = window.hitungRincianSoal(gabungan);
-    alert('✓ Berhasil menambahkan ' + soalBaru.length + ' soal ke "' + namaLengkap + '"!\nTotal sekarang: ' + info.teksRingkas);
+    var janjiSimpan = [];
+    if (typeof db !== 'undefined' && typeof set !== 'undefined' && typeof ref !== 'undefined') {
+        janjiSimpan.push(set(ref(db, 'bank_ujian/' + namaLengkap), gabungan));
+        janjiSimpan.push(set(ref(db, 'bank_soal_ujian/' + namaLengkap), gabungan));
+    } else {
+        janjiSimpan.push(Promise.resolve());
+    }
+
+    // Tunggu hingga server Firebase merespons berhasil
+    Promise.all(janjiSimpan).then(function() {
+        document.getElementById('uji-input-raw').value = "";
+        window.paketUjianTerpilih = namaLengkap;
+        
+        // Panggil render real-time
+        if (typeof window.renderDropdownBankUjianBawah === 'function') window.renderDropdownBankUjianBawah();
+        if (typeof window.pilihPaketUjianDariDropdown === 'function') window.pilihPaketUjianDariDropdown(namaLengkap);
+        
+        var selBawah = document.getElementById('dropdown-bank-ujian-bawah');
+        if (selBawah) selBawah.value = namaLengkap;
+
+        var info = (typeof window.hitungRincianSoal === 'function') ? window.hitungRincianSoal(gabungan) : {teksRingkas: gabungan.length + " Soal"};
+        notify('✅ Berhasil menyimpan ' + soalBaru.length + ' soal ke "' + namaLengkap + '"!\nTotal: ' + info.teksRingkas);
+    }).catch(function(err) {
+        notify('❌ Gagal menyimpan ujian: ' + err.message);
+    });
 };
 
 window.hapusSatuSoalUjian = function(key, idx) {
@@ -4273,4 +4299,146 @@ window.updateDatalistSiswaUjian = function() {
     }
     // Kosongkan nama jika kelas diganti
     document.getElementById('input-nama-siswa').value = ''; 
+};
+
+// ============================================================================
+// MESIN CETAK SOAL (FORMAT DOKUMEN FORMAL - PDF & WORD)
+// ============================================================================
+window.cetakPaketTerpilih = function(tipe) {
+    var key = (tipe === 'latihan') ? window.paketLatihanTerpilih : window.paketUjianTerpilih;
+    if (!key) {
+        var notify = window.tampilkanToastFullscreen || alert;
+        return notify("⚠️ Pilih paket soal pada dropdown di bawah terlebih dahulu!");
+    }
+
+    var arrSoal = [];
+    var info = { jenjang: 'Umum', mapel: 'Mata Pelajaran', judul: key };
+
+    if (tipe === 'latihan') {
+        var pkt = window.bankLatihanTerpadu[key];
+        arrSoal = window.ambilArraySoal(pkt);
+        if (window.uraiInfoPaketLatihan) info = window.uraiInfoPaketLatihan(key, pkt);
+    } else {
+        arrSoal = window.ambilArraySoal(window.bankUjianGlobal[key]);
+        if (window.uraiInfoPaketLatihan) info = window.uraiInfoPaketLatihan(key, null);
+    }
+
+    if (arrSoal.length === 0) {
+        var notify2 = window.tampilkanToastFullscreen || alert;
+        return notify2("⚠️ Paket ini tidak memiliki butir soal untuk dicetak.");
+    }
+
+    // Merakit struktur soal satu per satu
+    var htmlSoal = '';
+    arrSoal.forEach(function(q, i) {
+        var t = (q.type || 'mc').toLowerCase();
+        var kontenSoal = q.question.replace(/\n/g, '<br>');
+        var htmlOpsi = '';
+
+        if (t === 'essay' || t === 'uraian' || t === 'short_answer' || t === 'is') {
+            // PERBAIKAN: Spasi yang sangat lebar diganti menjadi jarak kecil yang rapi
+            var space = (t === 'essay' || t === 'uraian') ? '<div style="height:20px;"></div>' : '<div style="height:10px;"></div>';
+            htmlOpsi = space;
+        } else {
+            // Render Opsi A, B, C, D ke bawah
+            if (q.options) {
+                q.options.forEach(function(opt, oIdx) {
+                    var huruf = String.fromCharCode(65 + oIdx);
+                    htmlOpsi += '<div style="margin-top:3px;">' + huruf + '. ' + opt + '</div>';
+                });
+            }
+        }
+
+        // PERBAIKAN: Margin antar nomor soal (margin-bottom) diperkecil dari 22px menjadi 12px
+        htmlSoal += 
+            '<div style="margin-bottom: 12px; text-align: justify; page-break-inside: avoid;">' +
+                '<table style="width:100%; border:none; border-collapse:collapse;">' +
+                    '<tr>' +
+                        '<td style="width:28px; vertical-align:top; text-align:left; font-family:\'Times New Roman\', serif;">' + (i + 1) + '.</td>' +
+                        '<td style="vertical-align:top; font-family:\'Times New Roman\', serif;">' +
+                            '<div style="margin-bottom:4px;">' + kontenSoal + '</div>' +
+                            '<div>' + htmlOpsi + '</div>' +
+                        '</td>' +
+                    '</tr>' +
+                '</table>' +
+            '</div>';
+    });
+
+    // Template Dokumen
+    var judulFile = (info.judul || 'Soal').replace(/[^a-zA-Z0-9]/g, '_');
+    var htmlDoc = `
+    <html><head><title>Cetak - ${info.judul}</title>
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { padding: 0 !important; background: #fff !important; }
+        }
+        body { 
+            font-family: 'Times New Roman', Times, serif; 
+            font-size: 11pt; /* Font sedikit disesuaikan agar hemat kertas */
+            color: #000; 
+            line-height: 1.4; 
+            padding: 40px; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: #fdfdfd; 
+        }
+        .header-doc { 
+            display: flex; 
+            justify-content: space-between; 
+            color: #7f8c8d; 
+            margin-bottom: 25px; 
+            font-size: 11pt; 
+            text-transform: uppercase; 
+        }
+        .title-doc { 
+            text-align: center; 
+            font-size: 13pt; 
+            font-weight: bold; 
+            margin-bottom: 30px; 
+            text-transform: uppercase; 
+        }
+        .btn-action { 
+            background: #2c3e50; color: #fff; border: none; padding: 10px 20px; 
+            border-radius: 6px; cursor: pointer; font-weight: bold; margin-right: 10px; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; transition: 0.2s;
+        }
+        .btn-action:hover { opacity: 0.9; }
+        .btn-word { background: #2980b9; }
+    </style>
+    </head><body>
+        <div class="no-print" style="text-align:center; padding:20px; background:#f1f5f9; margin-bottom:30px; border-radius:8px; border:1px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+            <button class="btn-action" onclick="window.print()">🖨️ Cetak (Save to PDF)</button>
+            <button class="btn-action btn-word" onclick="exportKeWord()">📄 Download ke Word</button>
+            <p style="font-size:10pt; color:#64748b; margin:12px 0 0 0; font-family:sans-serif;">
+                Tips: Saat mencetak PDF, pastikan margin disetel ke <b>'Default'</b> atau <b>'None'</b> dan centang 'Background graphics' jika perlu.
+            </p>
+        </div>
+        
+        <div id="dokumen-kertas">
+            <div class="header-doc">
+                <span>(${info.jenjang})</span>
+                <span>${info.mapel}</span>
+            </div>
+            <div class="title-doc">SOAL "${info.judul}"</div>
+            ${htmlSoal}
+        </div>
+
+        <script>
+            function exportKeWord() {
+                var konten = document.getElementById('dokumen-kertas').innerHTML;
+                var htmlStr = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export Soal</title><style>body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; color: #000; } .header-doc { text-align:justify; color: #555; font-size: 11pt; margin-bottom: 25px; } .title-doc { text-align: center; font-size: 13pt; font-weight: bold; margin-bottom: 30px; }</style></head><body>" + konten + "</body></html>";
+                var blob = new Blob(['\\ufeff', htmlStr], { type: 'application/msword' }); 
+                var url = URL.createObjectURL(blob); 
+                var a = document.createElement('a'); 
+                a.href = url; a.download = 'Soal_${judulFile}.doc'; 
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            }
+        </script>
+    </body></html>
+    `;
+
+    var win = window.open('', '_blank', 'width=900,height=800');
+    win.document.write(htmlDoc);
+    win.document.close();
 };

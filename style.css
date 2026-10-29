@@ -902,3 +902,35 @@ body:not(.mode-edit-aktif) .header-popup-btn {
     text-align: center;
 }
 
+/* =========================================================
+   PERLINDUNGAN RESPONSIVITAS GLOBAL (ANTI TERPOTONG DI HP/TAB)
+   ========================================================= */
+img, video, canvas, iframe {
+    max-width: 100% !important;
+    height: auto;
+}
+
+table {
+    max-width: 100% !important;
+    word-wrap: break-word;
+}
+
+td, th {
+    word-break: break-word;
+}
+
+/* Memastikan modal dan pop-up tidak menjebol batas lebar layar HP */
+.modal-box, 
+.mahardika-modal-card {
+    max-width: 96vw !important;
+    margin: 0 auto;
+    overflow-x: hidden;
+}
+
+/* Mencegah teks soal dan opsi melampaui kartu ujian di HP */
+.quiz-question-card, 
+.content-block {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
